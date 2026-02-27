@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
+const USING_FALLBACK_SECRET = !process.env.JWT_SECRET;
 const JWT_EXPIRATION = '8h';
 const DRIVER_JWT_EXPIRATION = '4h';
 
@@ -22,11 +23,13 @@ export interface DriverTokenPayload {
 export type TokenPayload = AdminTokenPayload | DriverTokenPayload;
 
 export function createAdminToken(): string {
+  console.log('[JWT CREATE] Using fallback secret:', USING_FALLBACK_SECRET);
   return jwt.sign({ type: 'admin' }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
 }
 
 export function verifyAdminToken(token: string): AdminTokenPayload | null {
   try {
+    console.log('[JWT VERIFY] Using fallback secret:', USING_FALLBACK_SECRET);
     const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
     if (decoded.type !== 'admin') {
       console.error('[JWT VERIFY] Token type mismatch:', decoded.type);
@@ -34,7 +37,7 @@ export function verifyAdminToken(token: string): AdminTokenPayload | null {
     }
     return decoded as AdminTokenPayload;
   } catch (err) {
-    console.error('[JWT VERIFY ERROR]', err instanceof Error ? err.message : err);
+    console.error('[JWT VERIFY ERROR]', err instanceof Error ? err.message : err, 'Using fallback:', USING_FALLBACK_SECRET);
     return null;
   }
 }
