@@ -30,6 +30,7 @@ import type { CrudAction, CrudTable } from '@/types/api';
 
 function getAuthHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
+  console.log('[CLIENT] Token from sessionStorage:', token ? `${token.substring(0, 30)}...` : 'NULL');
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -37,11 +38,13 @@ function getAuthHeaders(): HeadersInit {
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
+  console.log('[CLIENT] Response status:', response.status);
   const data = await response.json();
+  console.log('[CLIENT] Response data:', JSON.stringify(data).substring(0, 200));
 
   if (!response.ok) {
     if (response.status === 401) {
-      console.error('Admin session expired or invalid');
+      console.error('[CLIENT] 401 received - clearing session. Response:', JSON.stringify(data));
       // Clear session and force redirect to login
       if (typeof window !== 'undefined') {
         sessionStorage.clear();
@@ -73,9 +76,12 @@ async function adminCrud<T>(
   options: CrudOptions = {}
 ): Promise<CrudResult<T>> {
   const { id, data, filters } = options;
+  console.log('[CLIENT] Calling /api/admin/crud:', { table, action });
+  const headers = getAuthHeaders();
+  console.log('[CLIENT] Headers being sent:', JSON.stringify(headers));
   const response = await fetch('/api/admin/crud', {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers,
     body: JSON.stringify({ table, action, id, data, filters }),
   });
   return handleResponse<CrudResult<T>>(response);
