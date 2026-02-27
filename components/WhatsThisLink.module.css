@@ -1,0 +1,69 @@
+/* What's This Link/Modal Styles */
+
+.btn {
+  background: none;
+  border: none;
+  color: #1565C0;
+  font-size: 0.85em;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  white-space: nowrap;
+  margin-left: 10px;
+}
+
+.btn:hover {
+  color: #0D47A1;
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 320px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.modal p {
+  font-size: 0.95em;
+  color: #444;
+  margin: 0 0 15px 0;
+  line-height: 1.5;
+}
+
+.img {
+  width: 100%;
+  border-radius: 4px;
+}
+
+.close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  cursor: pointer;
+  color: #888;
+  line-height: 1;
+  padding: 0;
+}
+
+.close:hover {
+  color: #333;
+}

@@ -1,0 +1,757 @@
+/* ============================================
+   DRIVER TEMPERATURE LOG - MOBILE STYLES
+   ============================================ */
+
+/* Container */
+.driverContainer {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Loading */
+.driverLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-size: 16px;
+  color: #666;
+  gap: 16px;
+}
+
+.driverLoading::before {
+  content: '';
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #ea580c;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   LOGIN SCREEN
+   ============================================ */
+
+.driverLogin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  text-align: center;
+}
+
+.driverLogo {
+  width: 120px;
+  height: auto;
+  margin-bottom: 24px;
+}
+
+.driverLogin h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.driverSubtitle {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 32px 0;
+}
+
+.driverLoginForm {
+  width: 100%;
+  max-width: 320px;
+}
+
+.driverLoginForm .driverInput {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.driverFormError {
+  background: #fff5f5;
+  color: #c53030;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+
+.driverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+.driverHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.driverLogoSmall {
+  width: 32px;
+  height: auto;
+}
+
+.driverName {
+  font-weight: 600;
+  font-size: 16px;
+  color: #333;
+}
+
+.driverLogoutBtn {
+  background: none;
+  border: 1px solid #e0e0e0;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+}
+
+.driverLogoutBtn:hover {
+  background: #f5f5f5;
+}
+
+/* ============================================
+   ERROR MESSAGE
+   ============================================ */
+
+.driverError {
+  background: #fff5f5;
+  color: #c53030;
+  padding: 12px 16px;
+  margin: 0;
+  font-size: 14px;
+  border-bottom: 1px solid #fed7d7;
+}
+
+/* ============================================
+   MAIN CONTENT
+   ============================================ */
+
+.driverMain {
+  padding: 16px;
+  padding-top: 70px; /* Space for fixed header */
+  padding-bottom: 100px; /* Space for fixed actions */
+}
+
+/* No session state */
+.driverNoSession {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.driverNoSession .driverBranding {
+  margin-bottom: 32px;
+}
+
+.driverNoSession .driverBranding img {
+  width: 160px;
+  height: auto;
+  margin-bottom: 16px;
+}
+
+.driverNoSession .driverBranding h1,
+.driverCompleted .driverBranding h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: #1f2937;
+}
+
+/* Session Completed */
+.driverCompleted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.driverCompleted .driverBranding {
+  margin-bottom: 32px;
+}
+
+.driverCompleted .driverBranding img {
+  width: 160px;
+  height: auto;
+  margin-bottom: 16px;
+}
+
+.driverCompleted .driverBranding h1 {
+  font-size: 24px;
+  color: #22c55e;
+}
+
+.completedSummary {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 24px;
+}
+
+.completedStat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.completedStat .statValue {
+  font-size: 36px;
+  font-weight: 700;
+  color: #ea580c;
+}
+
+.completedStat .statLabel {
+  font-size: 14px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.completedMessage {
+  color: #666;
+  font-size: 16px;
+  margin-bottom: 32px;
+}
+
+.driverNoSession h2 {
+  font-size: 18px;
+  margin: 0 0 8px 0;
+  color: #374151;
+  font-weight: 500;
+}
+
+.driverNoSession p {
+  color: #6b7280;
+  margin: 0 0 24px 0;
+  font-size: 14px;
+}
+
+.vehicleSelectGroup {
+  width: 100%;
+  max-width: 280px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.vehicleSelectGroup label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.vehicleSelectGroup .driverSelect {
+  width: 100%;
+}
+
+/* ============================================
+   ACTIVE SESSION
+   ============================================ */
+
+.driverSession {
+  /* Container for active session */
+}
+
+.driverSessionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.driverSessionHeader h2 {
+  font-size: 20px;
+  margin: 0;
+  color: #333;
+}
+
+.driverSessionDate {
+  color: #666;
+  font-size: 14px;
+}
+
+/* Entries list */
+.driverEntries {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.driverNoEntries {
+  text-align: center;
+  padding: 32px 16px;
+  background: #fff;
+  border-radius: 12px;
+  color: #666;
+}
+
+/* ============================================
+   ENTRY CARD
+   ============================================ */
+
+.driverEntryCard {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  position: relative;
+}
+
+.driverEntryCard.entryPickup {
+  border-left: 4px solid #3182ce;
+}
+
+.driverEntryCard.entryDelivery {
+  border-left: 4px solid #38a169;
+}
+
+.entryHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.entryType {
+  font-weight: 600;
+  font-size: 16px;
+  color: #333;
+}
+
+.entryTime {
+  font-size: 14px;
+  color: #666;
+}
+
+.entryBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entryTemp {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.entryTemp.tempOk {
+  color: #38a169;
+}
+
+.entryTemp.tempWarning {
+  color: #d97706;
+}
+
+.entryTemp.tempDanger {
+  color: #e53e3e;
+}
+
+.entryLocation {
+  font-size: 14px;
+  color: #666;
+}
+
+.entryLocationName {
+  font-weight: 600;
+  color: #333;
+}
+
+.entryLocationAddress {
+  font-size: 13px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.entryNotes {
+  font-size: 14px;
+  color: #555;
+  background: #f7fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.entryPhoto {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.entryFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.entryDeleteBtn {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.entryDeleteBtn:hover {
+  background: #fee2e2;
+}
+
+/* ============================================
+   ACTION BUTTONS
+   ============================================ */
+
+.driverActions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  gap: 12px;
+  border-top: 1px solid #e0e0e0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+
+.driverActions .driverBtn {
+  flex: 1;
+}
+
+.driverBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  min-height: 44px;
+  transition: all 0.15s;
+}
+
+.driverBtnPrimary {
+  background: #ea580c;
+  color: #fff;
+}
+
+.driverBtnPrimary:hover {
+  background: #c2410c;
+}
+
+.driverBtnPrimary:disabled {
+  background: #fdba74;
+  cursor: not-allowed;
+}
+
+.driverBtnSecondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.driverBtnSecondary:hover {
+  background: #e5e7eb;
+}
+
+.driverBtnLarge {
+  padding: 14px 32px;
+  font-size: 16px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.driverBtnCancel {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+/* ============================================
+   ADD ENTRY FORM
+   ============================================ */
+
+.driverEntryForm {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 100px; /* Space for fixed actions */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.driverEntryForm h3 {
+  font-size: 20px;
+  margin: 0 0 20px 0;
+  color: #333;
+}
+
+.formGroup {
+  margin-bottom: 20px;
+}
+
+.formGroup label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.driverInput {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.driverInput:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.driverInputLarge {
+  font-size: 32px;
+  font-weight: 700;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Temperature Control */
+.tempControl {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.tempBtn {
+  width: 60px;
+  height: 60px;
+  border: 2px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 28px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  color: #374151;
+}
+
+.tempBtn:active {
+  background: #e5e7eb;
+}
+
+.tempMinus {
+  border-radius: 12px 0 0 12px;
+  border-right: none;
+}
+
+.tempPlus {
+  border-radius: 0 12px 12px 0;
+  border-left: none;
+}
+
+.driverInputTemp {
+  flex: 1;
+  height: 60px;
+  font-size: 32px;
+  font-weight: 700;
+  text-align: center;
+  border: 2px solid #e5e7eb;
+  border-radius: 0;
+  padding: 0 8px;
+  -moz-appearance: textfield;
+}
+
+.driverInputTemp::-webkit-outer-spin-button,
+.driverInputTemp::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.driverInputTemp:focus {
+  outline: none;
+  border-color: #ea580c;
+}
+
+/* Select dropdown */
+.driverSelect {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  box-sizing: border-box;
+  background: white;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.driverSelect:focus {
+  outline: none;
+  border-color: #ea580c;
+}
+
+.driverTextarea {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.driverTextarea:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.driverFileInput {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  border: 2px dashed #e0e0e0;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.photoPreviews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.photoPreviewItem {
+  position: relative;
+  display: inline-block;
+}
+
+.photoPreview {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.photoRemoveBtn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: white;
+  border: 2px solid white;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photoCount {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.entryPhotos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.formWarning {
+  color: #e53e3e;
+  font-size: 14px;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+.formActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.formActions .driverBtn {
+  flex: 1;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (min-width: 600px) {
+  .driverMain {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 24px;
+    padding-top: 90px;
+    padding-bottom: 120px;
+  }
+
+  .driverActions {
+    max-width: 500px;
+    margin: 0 auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .driverEntryForm {
+    padding: 24px;
+  }
+}

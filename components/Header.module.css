@@ -1,0 +1,91 @@
+/* Header Component Styles */
+
+.header {
+  background: linear-gradient(135deg, var(--raptor-black) 0%, #333 100%);
+  color: var(--bg-white);
+  padding: 30px;
+}
+
+.headerTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.headerTopCompact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.headerTopCompact .locationName {
+  margin: 0;
+}
+
+.projectId {
+  font-size: 0.8em;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+}
+
+.locationName {
+  font-size: 1.8em;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--raptor-orange);
+}
+
+.locationAddress {
+  font-size: 1em;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 25px;
+}
+
+.locationDetail {
+  margin-top: -20px;
+  opacity: 0.9;
+}
+
+.headerMeta {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 30px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+}
+
+.metaLabel {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+.metaValue {
+  font-size: 0.95em;
+  font-weight: 500;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 600px) {
+  .header {
+    padding: 20px;
+  }
+
+  .headerMeta {
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+
+  .locationName {
+    font-size: 1.4em;
+  }
+}

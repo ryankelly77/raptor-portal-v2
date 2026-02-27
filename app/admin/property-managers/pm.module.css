@@ -1,0 +1,521 @@
+/* Property Managers Page Styles */
+.pmPage {
+  padding: 0;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.createButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: #f97316;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.createButton:hover {
+  background-color: #ea580c;
+}
+
+/* Filters */
+.filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.searchInput:focus {
+  border-color: #f97316;
+}
+
+.filterSelect {
+  padding: 10px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: #fff;
+  outline: none;
+  cursor: pointer;
+}
+
+/* PM List */
+.pmList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* PM Card (Accordion) */
+.pmCard {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.pmHeader {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  gap: 16px;
+}
+
+.pmHeader:hover {
+  background-color: #f9fafb;
+}
+
+.expandIcon {
+  font-size: 12px;
+  color: #9ca3af;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.expandIcon.expanded {
+  transform: rotate(90deg);
+}
+
+.pmInfo {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 1fr 1fr 80px;
+  gap: 16px;
+  align-items: center;
+}
+
+.pmName {
+  font-weight: 600;
+  color: #111827;
+  font-size: 15px;
+}
+
+.pmEmail {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.pmPhone {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.pmCompany {
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.pmStats {
+  display: flex;
+  gap: 8px;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badgeActive {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.badgeInactive {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.badgeCount {
+  background-color: #e0e7ff;
+  color: #4338ca;
+}
+
+.pmActions {
+  display: flex;
+  gap: 8px;
+}
+
+.btnEdit,
+.btnDelete {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btnEdit {
+  background-color: #f3f4f6;
+  color: #374151;
+  border: none;
+}
+
+.btnEdit:hover {
+  background-color: #e5e7eb;
+}
+
+.btnDelete {
+  background-color: #fef2f2;
+  color: #ef4444;
+  border: none;
+}
+
+.btnDelete:hover {
+  background-color: #fee2e2;
+}
+
+.btnCopyLink {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background-color: #fff7ed;
+  color: #f97316;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btnCopyLink:hover {
+  background-color: #ffedd5;
+}
+
+/* PM Content (Expanded) */
+.pmContent {
+  border-top: 1px solid #e5e7eb;
+  padding: 20px;
+  background-color: #f9fafb;
+}
+
+/* Properties List */
+.propertiesList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.propertyCard {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.propertyHeader {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  gap: 12px;
+}
+
+.propertyHeader:hover {
+  background-color: #f9fafb;
+}
+
+.propertyInfo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.propertyName {
+  font-weight: 600;
+  color: #111827;
+  font-size: 14px;
+}
+
+.locationCount {
+  padding: 2px 8px;
+  background-color: #f3f4f6;
+  border-radius: 10px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.propertyActions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Locations List */
+.locationsContent {
+  border-top: 1px solid #f3f4f6;
+  padding: 12px 16px;
+  background-color: #fafafa;
+}
+
+.locationsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.locationItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.locationName {
+  color: #374151;
+}
+
+.locationActions {
+  display: flex;
+  gap: 6px;
+}
+
+.btnSmall {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btnSmall.edit {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.btnSmall.delete {
+  background-color: #fef2f2;
+  color: #ef4444;
+}
+
+/* Add buttons */
+.addPropertyBtn,
+.addLocationBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: #fff;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+
+.addPropertyBtn:hover,
+.addLocationBtn:hover {
+  border-color: #f97316;
+  color: #f97316;
+}
+
+/* Form Styles */
+.inlineForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  background: #fff7ed;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.inlineForm input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+
+.inlineForm input:focus {
+  border-color: #f97316;
+}
+
+.btnSave,
+.btnCancel {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+
+.btnSave {
+  background-color: #f97316;
+  color: #fff;
+}
+
+.btnSave:hover {
+  background-color: #ea580c;
+}
+
+.btnCancel {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.btnCancel:hover {
+  background-color: #e5e7eb;
+}
+
+/* Edit Form in PM Header */
+.pmEditForm {
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 1fr 1fr auto;
+  gap: 12px;
+  flex: 1;
+  align-items: center;
+}
+
+.pmEditForm input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+
+.pmEditForm input:focus {
+  border-color: #f97316;
+}
+
+.editActions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  padding: 60px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  color: #6b7280;
+}
+
+.emptyProperties,
+.emptyLocations {
+  text-align: center;
+  padding: 24px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #f97316;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .pmInfo {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .pmPhone,
+  .pmCompany {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .pageHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  .pmInfo {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .pmHeader {
+    flex-wrap: wrap;
+  }
+
+  .pmActions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+
+  .pmEditForm {
+    grid-template-columns: 1fr;
+  }
+}

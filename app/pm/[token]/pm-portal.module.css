@@ -1,0 +1,989 @@
+/* PM Portal Layout */
+.pmPortal {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* PM Sidebar */
+.pmSidebar {
+  width: 280px;
+  background: linear-gradient(180deg, var(--raptor-black) 0%, #1a1a1a 100%);
+  color: white;
+  padding: 25px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.pmSidebarHeader {
+  margin-bottom: 30px;
+  text-align: center;
+  padding: 10px 0;
+}
+
+.pmSidebarInfo {
+  margin-bottom: 25px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pmSidebarInfo h2 {
+  font-size: 1.2em;
+  margin: 0 0 5px 0;
+  color: var(--raptor-orange);
+}
+
+.pmSidebarInfo p {
+  margin: 0;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.pmSidebarNav {
+  margin-bottom: 25px;
+}
+
+.pmSidebarNav h3 {
+  font-size: 0.75em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 12px 0;
+  letter-spacing: 1px;
+}
+
+.pmNavLink {
+  display: block;
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 0.95em;
+  margin-bottom: 4px;
+  transition: all 0.2s;
+  cursor: pointer;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.pmNavLink:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.pmNavLinkActive {
+  background: rgba(255, 88, 15, 0.2);
+  color: var(--raptor-orange);
+}
+
+.pmSidebarSurvey {
+  background: rgba(255, 88, 15, 0.15);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.pmSidebarSurvey h3 {
+  font-size: 0.95em;
+  margin: 0 0 8px 0;
+  color: var(--raptor-orange);
+}
+
+.pmSidebarSurvey p {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+}
+
+.pmSurveyBtn {
+  display: inline-block;
+  background: var(--raptor-orange);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.85em;
+  transition: background 0.2s;
+}
+
+.pmSurveyBtn:hover {
+  background: #e04a00;
+}
+
+.pmSidebarSendPhone {
+  margin-bottom: 20px;
+}
+
+.sendPhoneBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+  justify-content: center;
+}
+
+.sendPhoneBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.pmSidebarFooter {
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+/* PM Main Content */
+.pmMain {
+  flex: 1;
+  margin-left: 280px;
+  padding: 30px;
+  background: #f0f2f5;
+}
+
+.pmMainTitle {
+  font-size: 1.8em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 auto 25px auto;
+  max-width: 900px;
+  text-align: center;
+}
+
+/* PM Main Header with Tabs */
+.pmMainHeader {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: white;
+  margin: 0 auto 25px auto;
+  max-width: 900px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.pmViewToggle {
+  display: flex;
+}
+
+.pmToggleBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  border: none;
+  background: #f5f5f5;
+  font-size: 1em;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 3px solid transparent;
+}
+
+.pmToggleBtn:hover {
+  background: #eee;
+  color: var(--text-primary);
+}
+
+.pmToggleBtnActive {
+  background: white;
+  color: var(--raptor-orange);
+  border-bottom-color: var(--raptor-orange);
+}
+
+.pmUnreadBadge {
+  background: #c62828;
+  color: white;
+  font-size: 0.85em;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+  margin-left: 8px;
+  animation: pulseBadge 1.5s ease-in-out infinite;
+  box-shadow: 0 2px 8px rgba(198, 40, 40, 0.4);
+}
+
+@keyframes pulseBadge {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.pmProjectSection {
+  margin-bottom: 40px;
+}
+
+.noProjects {
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 16px;
+}
+
+.noProjects h2 {
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.noProjects p {
+  color: var(--text-secondary);
+}
+
+/* PM Welcome Header */
+.pmWelcomeHeader {
+  background: var(--raptor-black);
+  color: white;
+  padding: 20px 24px;
+  margin: 0 auto 20px auto;
+  max-width: 900px;
+  border-radius: 12px;
+}
+
+.pmWelcomeHeaderCompleted {
+  background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+}
+
+.pmWelcomeInner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.pmWelcomeText {
+  flex: 1;
+}
+
+.pmWelcomeText p {
+  margin: 0;
+  font-size: 1em;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.pmWelcomeText strong {
+  color: var(--raptor-orange);
+}
+
+.pmWelcomeCheck {
+  font-size: 1.6em;
+  flex-shrink: 0;
+  animation: celebrateCheck 0.6s ease;
+}
+
+@keyframes celebrateCheck {
+  0% {
+    transform: scale(0) rotate(-180deg);
+  }
+  50% {
+    transform: scale(1.3) rotate(10deg);
+  }
+  70% {
+    transform: scale(0.9) rotate(-5deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.pmTaskCounter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.pmTaskCircle {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: var(--raptor-orange);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 88, 15, 0.3);
+  animation: balloonPop 0.5s ease;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.pmTaskCircle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(255, 88, 15, 0.4);
+}
+
+@keyframes balloonPop {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.35);
+    box-shadow: 0 6px 20px rgba(255, 88, 15, 0.5);
+  }
+  50% {
+    transform: scale(0.9);
+  }
+  75% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(255, 88, 15, 0.3);
+  }
+}
+
+.pmTaskRemaining {
+  font-size: 1.8em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pmTaskTotal {
+  font-size: 0.75em;
+  opacity: 0.9;
+}
+
+.pmTaskLabel {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+
+/* PM Messages View */
+.pmMessagesContainer {
+  max-width: 700px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 200px);
+  min-height: 500px;
+}
+
+.pmMessagesHeader {
+  padding: 25px 30px;
+  background: linear-gradient(135deg, var(--raptor-black) 0%, #333 100%);
+  color: white;
+}
+
+.pmMessagesHeader h2 {
+  margin: 0 0 8px 0;
+  font-size: 1.3em;
+  color: var(--raptor-orange);
+}
+
+.pmMessagesHeader p {
+  margin: 0;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.pmMessagesList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #f8f9fa;
+}
+
+.pmMessagesLoading,
+.pmMessagesEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.pmMessagesEmpty svg {
+  margin-bottom: 15px;
+  color: var(--border-color);
+}
+
+.pmMessagesEmpty p {
+  margin: 0;
+  font-size: 1em;
+}
+
+.pmMessage {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+
+.pmMessageOutgoing {
+  align-items: flex-end;
+}
+
+.pmMessageIncoming {
+  align-items: flex-start;
+}
+
+.pmMessageBubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  position: relative;
+}
+
+.pmMessageOutgoing .pmMessageBubble {
+  background: var(--raptor-orange);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.pmMessageIncoming .pmMessageBubble {
+  background: white;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-bottom-left-radius: 4px;
+}
+
+.pmMessageText {
+  font-size: 0.95em;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.pmMessageTime {
+  font-size: 0.75em;
+  margin-top: 6px;
+  opacity: 0.7;
+}
+
+.pmMessageSender {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+.pmMessagesInput {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+  background: white;
+  border-top: 1px solid var(--border-color);
+}
+
+.pmMessagesInput textarea {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 0.95em;
+  font-family: inherit;
+  resize: none;
+  min-height: 48px;
+  max-height: 120px;
+  transition: border-color 0.2s;
+}
+
+.pmMessagesInput textarea:focus {
+  outline: none;
+  border-color: var(--raptor-orange);
+}
+
+.pmMessagesInput textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.pmMessageSendBtn {
+  padding: 12px 24px;
+  background: var(--raptor-orange);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pmMessageSendBtn:hover:not(:disabled) {
+  background: #e04a00;
+}
+
+.pmMessageSendBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* PM Mobile Header - Hidden on desktop */
+.pmMobileHeader {
+  display: none;
+}
+
+/* PM Mobile Bottom Bar - Hidden on desktop */
+.pmMobileBar {
+  display: none;
+}
+
+/* Progress Widget in PM Portal */
+.progressWidget {
+  max-width: 900px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+/* Tablet Responsive */
+@media (max-width: 900px) {
+  .pmPortal {
+    flex-direction: column;
+  }
+
+  .pmSidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    padding: 20px;
+  }
+
+  .pmMain {
+    margin-left: 0;
+    padding: 20px;
+  }
+
+  .pmSidebarSendPhone {
+    display: none;
+  }
+
+  .pmSidebarHeader {
+    margin-bottom: 20px;
+  }
+
+  .pmSidebarInfo {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+  }
+
+  .pmSidebarNav {
+    margin-bottom: 15px;
+  }
+
+  .pmSidebarSurvey {
+    margin-bottom: 15px;
+  }
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+  /* Hide sidebar and desktop welcome header on mobile */
+  .pmSidebar {
+    display: none;
+  }
+
+  .pmWelcomeHeader {
+    display: none;
+  }
+
+  /* Show mobile header - sticky at top */
+  .pmMobileHeader {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    padding: 12px 15px;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    gap: 12px;
+  }
+
+  .pmMobileLogo {
+    height: 44px;
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .pmMobileProgress {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 180px;
+  }
+
+  .pmMobileProgressBar {
+    flex: 1;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .pmMobileProgressFill {
+    height: 100%;
+    background: var(--raptor-orange);
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+
+  .pmMobileProgressText {
+    font-size: 0.95em;
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 36px;
+  }
+
+  .pmMobileGreeting {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-light);
+    border: none;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--raptor-orange);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .pmMobileGreeting:hover {
+    background: #e8e8e8;
+  }
+
+  .pmMobileGreetingIcon {
+    transition: transform 0.2s;
+  }
+
+  .pmMobileGreetingIconOpen {
+    transform: rotate(180deg);
+  }
+
+  .pmMobileMessage {
+    position: fixed;
+    top: 68px;
+    left: 0;
+    right: 0;
+    background: var(--raptor-orange);
+    color: white;
+    padding: 14px 15px;
+    z-index: 99;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+  }
+
+  .pmMobileMessage p {
+    margin: 0;
+    font-size: 0.9em;
+    line-height: 1.5;
+  }
+
+  .pmMobileMessage strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  /* Adjust main content padding for header and bottom bar */
+  .pmMain {
+    padding: 75px 15px 90px 15px;
+    margin-left: 0;
+  }
+
+  /* PM View Toggle mobile */
+  .pmMainHeader {
+    position: sticky;
+    top: 68px;
+    z-index: 99;
+    margin: 0 -15px 15px -15px;
+    max-width: none;
+    border-radius: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .pmToggleBtn {
+    padding: 14px 16px;
+    font-size: 0.9em;
+  }
+
+  /* PM Messages mobile */
+  .pmMessagesContainer {
+    height: calc(100vh - 180px);
+    min-height: 400px;
+    border-radius: 12px;
+  }
+
+  .pmMessagesHeader {
+    padding: 20px;
+  }
+
+  .pmMessagesHeader h2 {
+    font-size: 1.1em;
+  }
+
+  .pmMessagesList {
+    padding: 15px;
+  }
+
+  .pmMessageBubble {
+    max-width: 85%;
+  }
+
+  .pmMessagesInput {
+    padding: 15px;
+    gap: 10px;
+  }
+
+  .pmMessagesInput textarea {
+    padding: 10px 14px;
+  }
+
+  .pmMessageSendBtn {
+    padding: 10px 16px;
+  }
+
+  .pmMessageSendBtn span {
+    display: none;
+  }
+
+  /* Remove any top margin from first widget */
+  .pmMain > .progressWidget:first-child,
+  .pmMain > .pmProjectSection:first-child {
+    margin-top: 0;
+  }
+
+  /* Hide desktop title on mobile */
+  .pmMainTitle {
+    display: none;
+  }
+
+  /* Show mobile bottom bar */
+  .pmMobileBar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--raptor-black);
+    padding: 12px 16px;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 100;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
+  }
+
+  .pmMobileTasks {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pmMobileTasksCount {
+    width: 32px;
+    height: 32px;
+    background: var(--raptor-orange);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 0.95em;
+  }
+
+  .pmMobileTasksCountComplete {
+    background: #2e7d32;
+  }
+
+  .pmMobileTasksPrefix {
+    color: white;
+    font-size: 0.95em;
+    font-weight: 500;
+  }
+
+  .pmMobileTasksLabel {
+    color: white;
+    font-size: 0.95em;
+    font-weight: 500;
+  }
+
+  .pmMobileProperty {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 0.95em;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: default;
+  }
+
+  .pmMobilePropertyHasMenu {
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .pmMobilePropertyHasMenu:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .pmMobilePropertyName {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pmMobileCaret {
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .pmMobileCaretOpen {
+    transform: rotate(180deg);
+  }
+
+  .pmMobileMenu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    background: var(--raptor-black);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  .pmMobileMenuItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: white;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .pmMobileMenuItem:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .pmMobileMenuItemActive {
+    background: var(--raptor-orange);
+  }
+
+  .pmMobileMenuName {
+    font-size: 0.95em;
+    font-weight: 500;
+  }
+
+  .pmMobileMenuTasks {
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .pmMobileMenuItemActive .pmMobileMenuTasks {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  /* PM Welcome Header mobile */
+  .pmWelcomeHeader {
+    padding: 15px;
+  }
+
+  .pmWelcomeInner {
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
+  }
+
+  .pmWelcomeText p {
+    font-size: 0.9em;
+  }
+
+  .pmTaskCounter {
+    flex-direction: row;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .pmTaskCircle {
+    width: 50px;
+    height: 50px;
+  }
+
+  .pmTaskRemaining {
+    font-size: 1.4em;
+  }
+
+  .pmTaskTotal {
+    font-size: 0.65em;
+  }
+
+  .pmTaskLabel {
+    font-size: 0.75em;
+  }
+}
+
+/* Powered By Styles */
+.poweredBy {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8em;
+  text-align: center;
+}
+
+.poweredBy a {
+  color: var(--raptor-orange);
+  text-decoration: none;
+}
+
+.poweredBy a:hover {
+  text-decoration: underline;
+}
+
+.poweredByTagline {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.9em;
+}

@@ -1,0 +1,563 @@
+/* Temperature Logs Page Styles */
+.temperaturePage {
+  padding: 0;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.exportButton,
+.refreshButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.exportButton:hover,
+.refreshButton:hover {
+  background-color: #e5e7eb;
+}
+
+.exportButton {
+  background-color: #f97316;
+  color: #fff;
+}
+
+.exportButton:hover {
+  background-color: #ea580c;
+}
+
+/* Section Tabs */
+.sectionTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tabButton {
+  padding: 10px 20px;
+  background-color: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tabButton:hover {
+  background-color: #f9fafb;
+}
+
+.tabButton.active {
+  background-color: #f97316;
+  border-color: #f97316;
+  color: #fff;
+}
+
+/* Card */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.cardHeader {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.cardBody {
+  padding: 0;
+}
+
+/* Add Driver Form */
+.addDriverForm {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  background-color: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+  flex-wrap: wrap;
+}
+
+.addDriverForm input {
+  flex: 1;
+  min-width: 150px;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.addDriverForm input:focus {
+  border-color: #f97316;
+}
+
+.btnPrimary,
+.btnSecondary,
+.btnDanger {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btnPrimary {
+  background-color: #f97316;
+  color: #fff;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background-color: #ea580c;
+}
+
+.btnPrimary:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btnSecondary {
+  background-color: #fff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btnSecondary:hover {
+  background-color: #f9fafb;
+}
+
+.btnDanger {
+  background-color: #fef2f2;
+  color: #ef4444;
+}
+
+.btnDanger:hover {
+  background-color: #fee2e2;
+}
+
+/* Table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  padding: 12px 16px;
+  background-color: #f9fafb;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table td {
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.table tr:hover td {
+  background-color: #f9fafb;
+}
+
+.table tr.editing td {
+  background-color: #fff7ed;
+}
+
+.table tr.inactive td {
+  opacity: 0.6;
+}
+
+/* Edit inputs in table */
+.editInput {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100%;
+  outline: none;
+}
+
+.editInput:focus {
+  border-color: #f97316;
+}
+
+/* Status Badge */
+.statusBadge {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.statusBadge.active {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.statusBadge.inactive {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.statusBadge.inProgress {
+  background-color: #fef3c7;
+  color: #d97706;
+}
+
+.statusBadge.completed {
+  background-color: #dbeafe;
+  color: #2563eb;
+}
+
+/* Action Buttons */
+.actionButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.btnSmall {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btnSmall.edit {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.btnSmall.edit:hover {
+  background-color: #e5e7eb;
+}
+
+.btnSmall.link {
+  background-color: #fff7ed;
+  color: #f97316;
+}
+
+.btnSmall.link:hover {
+  background-color: #ffedd5;
+}
+
+.btnSmall.delete {
+  background-color: #fef2f2;
+  color: #ef4444;
+}
+
+.btnSmall.delete:hover {
+  background-color: #fee2e2;
+}
+
+.btnSmall.toggle {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Filters */
+.filters {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.filterSelect,
+.filterInput {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+
+.filterSelect:focus,
+.filterInput:focus {
+  border-color: #f97316;
+}
+
+/* Session Detail */
+.sessionDetail {
+  padding: 20px;
+  background-color: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.sessionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.sessionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 4px;
+}
+
+.sessionMeta {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Entries List */
+.entriesList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entryItem {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.entryType {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.entryType.start {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.entryType.stop {
+  background-color: #dbeafe;
+  color: #2563eb;
+}
+
+.entryType.end {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.entryInfo {
+  flex: 1;
+}
+
+.entryLocation {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.entryNotes {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.entryTemp {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.entryTemp.warning {
+  color: #dc2626;
+}
+
+.entryTime {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.entryPhoto {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+/* Export Modal */
+.exportModal {
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+.exportTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 12px;
+}
+
+.exportRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.exportGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.exportLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+/* Photo Modal */
+.photoModal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  cursor: pointer;
+}
+
+.photoModal img {
+  max-width: 90%;
+  max-height: 90%;
+  border-radius: 8px;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #f97316;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.emptyState p {
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .pageHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .sectionTabs {
+    flex-direction: column;
+  }
+
+  .tabButton {
+    width: 100%;
+  }
+
+  .addDriverForm {
+    flex-direction: column;
+  }
+
+  .addDriverForm input {
+    width: 100%;
+  }
+
+  .table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  .exportRow {
+    flex-direction: column;
+  }
+
+  .exportGroup {
+    width: 100%;
+  }
+}

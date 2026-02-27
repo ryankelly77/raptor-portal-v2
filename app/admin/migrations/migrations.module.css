@@ -1,0 +1,377 @@
+/* Migrations Page Styles */
+.migrationsPage {
+  padding: 0;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.pageDescription {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refreshButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refreshButton:hover {
+  background-color: #e5e7eb;
+}
+
+/* Warning Banner */
+.warningBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
+  background-color: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.warningIcon {
+  width: 24px;
+  height: 24px;
+  color: #d97706;
+  flex-shrink: 0;
+}
+
+.warningContent h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+  margin: 0 0 4px;
+}
+
+.warningContent p {
+  font-size: 13px;
+  color: #92400e;
+  margin: 0;
+}
+
+/* Migrations Card */
+.migrationsCard {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.cardHeader {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Migrations List */
+.migrationsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.migrationItem {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.migrationItem:last-child {
+  border-bottom: none;
+}
+
+.migrationStatus {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.migrationStatus.completed {
+  background-color: #dcfce7;
+}
+
+.migrationStatus.pending {
+  background-color: #fef3c7;
+}
+
+.migrationStatus.failed {
+  background-color: #fee2e2;
+}
+
+.migrationStatus svg {
+  width: 16px;
+  height: 16px;
+}
+
+.migrationInfo {
+  flex: 1;
+}
+
+.migrationName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 2px;
+}
+
+.migrationDescription {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.migrationMeta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.migrationVersion {
+  font-family: monospace;
+  padding: 2px 6px;
+  background-color: #f3f4f6;
+  border-radius: 4px;
+}
+
+.migrationActions {
+  display: flex;
+  gap: 8px;
+}
+
+.btnRun,
+.btnRevert {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btnRun {
+  background-color: #f97316;
+  color: #fff;
+}
+
+.btnRun:hover:not(:disabled) {
+  background-color: #ea580c;
+}
+
+.btnRun:disabled {
+  background-color: #d1d5db;
+  cursor: not-allowed;
+}
+
+.btnRevert {
+  background-color: #fef2f2;
+  color: #ef4444;
+}
+
+.btnRevert:hover {
+  background-color: #fee2e2;
+}
+
+/* SQL Editor */
+.sqlEditor {
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+.sqlEditorTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 12px;
+}
+
+.sqlInput {
+  width: 100%;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+}
+
+.sqlInput:focus {
+  border-color: #f97316;
+}
+
+.sqlActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.btnPrimary,
+.btnSecondary {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btnPrimary {
+  background-color: #f97316;
+  color: #fff;
+  border: none;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background-color: #ea580c;
+}
+
+.btnPrimary:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btnSecondary {
+  background-color: #fff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btnSecondary:hover {
+  background-color: #f9fafb;
+}
+
+/* SQL Result */
+.sqlResult {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.sqlResult.success {
+  background-color: #dcfce7;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+}
+
+.sqlResult.error {
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.sqlResult pre {
+  margin: 8px 0 0;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #f97316;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .pageHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .migrationItem {
+    flex-wrap: wrap;
+  }
+
+  .migrationMeta {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .migrationActions {
+    width: 100%;
+    margin-top: 8px;
+  }
+}
