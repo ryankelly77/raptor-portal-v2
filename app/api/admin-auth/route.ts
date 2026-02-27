@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { createAdminToken } from '@/lib/auth/jwt';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'raptor-admin-2024';
-const JWT_SECRET = process.env.JWT_SECRET || 'raptor-jwt-secret-key';
 
 export async function POST(request: Request) {
   try {
@@ -16,8 +15,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Invalid password' }, { status: 401 });
     }
 
-    // Generate JWT token
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    // Generate JWT token using shared auth module
+    const token = createAdminToken();
 
     return NextResponse.json({ success: true, token });
   } catch (error) {
