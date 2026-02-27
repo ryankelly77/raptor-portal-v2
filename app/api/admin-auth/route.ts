@@ -17,7 +17,6 @@ export async function POST(request: Request) {
 
     // Generate JWT token using shared auth module
     const token = createAdminToken();
-    console.log('[LOGIN SUCCESS] Token created, length:', token.length, 'prefix:', token.substring(0, 20));
 
     return NextResponse.json({ success: true, token });
   } catch (error) {

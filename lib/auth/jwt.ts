@@ -1,8 +1,15 @@
 import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
-const USING_FALLBACK_SECRET = !process.env.JWT_SECRET;
+// JWT_SECRET is required - no fallback to prevent secret mismatch between serverless instances
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is not configured');
+  }
+  return secret;
+}
+
 const JWT_EXPIRATION = '8h';
 const DRIVER_JWT_EXPIRATION = '4h';
 
@@ -23,21 +30,17 @@ export interface DriverTokenPayload {
 export type TokenPayload = AdminTokenPayload | DriverTokenPayload;
 
 export function createAdminToken(): string {
-  console.log('[JWT CREATE] Using fallback secret:', USING_FALLBACK_SECRET);
-  return jwt.sign({ type: 'admin' }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
+  return jwt.sign({ type: 'admin' }, getJwtSecret(), { expiresIn: JWT_EXPIRATION });
 }
 
 export function verifyAdminToken(token: string): AdminTokenPayload | null {
   try {
-    console.log('[JWT VERIFY] Using fallback secret:', USING_FALLBACK_SECRET);
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const decoded = jwt.verify(token, getJwtSecret()) as TokenPayload;
     if (decoded.type !== 'admin') {
-      console.error('[JWT VERIFY] Token type mismatch:', decoded.type);
       return null;
     }
     return decoded as AdminTokenPayload;
-  } catch (err) {
-    console.error('[JWT VERIFY ERROR]', err instanceof Error ? err.message : err, 'Using fallback:', USING_FALLBACK_SECRET);
+  } catch {
     return null;
   }
 }
@@ -45,14 +48,14 @@ export function verifyAdminToken(token: string): AdminTokenPayload | null {
 export function createDriverToken(driverId: string, email: string): string {
   return jwt.sign(
     { type: 'driver', driverId, email },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: DRIVER_JWT_EXPIRATION }
   );
 }
 
 export function verifyDriverToken(token: string): DriverTokenPayload | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const decoded = jwt.verify(token, getJwtSecret()) as TokenPayload;
     if (decoded.type !== 'driver') {
       return null;
     }

@@ -326,11 +326,6 @@ export async function POST(request: NextRequest) {
   // Admin authentication
   const auth = requireAdmin(request);
   if (!auth.authorized) {
-    console.error('[CRUD AUTH FAILED]', {
-      error: auth.error,
-      hasAuthHeader: !!request.headers.get('authorization'),
-      authHeaderPrefix: request.headers.get('authorization')?.substring(0, 20),
-    });
     return NextResponse.json({ error: auth.error }, { status: 401 });
   }
 
