@@ -323,6 +323,10 @@ async function handleMigration(
 }
 
 export async function POST(request: NextRequest) {
+  console.log('[CRUD] ====== ROUTE HANDLER CALLED ======');
+  console.log('[CRUD] URL:', request.url);
+  console.log('[CRUD] Method:', request.method);
+
   // NUCLEAR FIX: Inline JWT verification, no shared lib
   const authHeader = request.headers.get('authorization');
   console.log('[CRUD] Auth header exists:', !!authHeader);
