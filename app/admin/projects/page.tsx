@@ -20,8 +20,6 @@ import adminStyles from '../admin.module.css';
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
   { href: '/admin/projects', label: 'Projects', icon: 'projects' },
-  { href: '/admin/equipment', label: 'Equipment', icon: 'equipment' },
-  { href: '/admin/surveys', label: 'Surveys', icon: 'surveys' },
   { href: '/admin/messages', label: 'Messages', icon: 'messages' },
 ];
 
