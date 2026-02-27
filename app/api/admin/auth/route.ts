@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
 
   if (isValidPassword) {
     try {
+      console.log('[AUTH] JWT_SECRET available:', !!process.env.JWT_SECRET, 'length:', process.env.JWT_SECRET?.length);
       const token = createAdminToken();
 
       return NextResponse.json(

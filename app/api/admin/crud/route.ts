@@ -324,6 +324,7 @@ async function handleMigration(
 
 export async function POST(request: NextRequest) {
   // Admin authentication
+  console.log('[CRUD] JWT_SECRET available:', !!process.env.JWT_SECRET, 'length:', process.env.JWT_SECRET?.length);
   const auth = requireAdmin(request);
   if (!auth.authorized) {
     return NextResponse.json({ error: auth.error }, { status: 401 });
