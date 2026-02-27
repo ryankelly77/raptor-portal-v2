@@ -29,10 +29,12 @@ export function verifyAdminToken(token: string): AdminTokenPayload | null {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
     if (decoded.type !== 'admin') {
+      console.error('[JWT VERIFY] Token type mismatch:', decoded.type);
       return null;
     }
     return decoded as AdminTokenPayload;
-  } catch {
+  } catch (err) {
+    console.error('[JWT VERIFY ERROR]', err instanceof Error ? err.message : err);
     return null;
   }
 }
