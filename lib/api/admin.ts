@@ -44,13 +44,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     if (response.status === 401) {
-      console.error('[CLIENT] 401 received - clearing session. Response:', JSON.stringify(data));
-      // Clear session and force redirect to login
-      if (typeof window !== 'undefined') {
-        sessionStorage.clear();
-        window.location.href = '/admin';
-      }
-      throw new Error('Session expired');
+      console.error('[CLIENT] !!!! 401 ERROR !!!!');
+      console.error('[CLIENT] Response body:', JSON.stringify(data, null, 2));
+      console.error('[CLIENT] DO NOT REDIRECT - check console now');
+      // TEMPORARILY DISABLED REDIRECT FOR DEBUGGING
+      // sessionStorage.clear();
+      // window.location.href = '/admin';
+      throw new Error('Session expired - check console for details');
     }
     throw new Error(data.error || `HTTP ${response.status}`);
   }
