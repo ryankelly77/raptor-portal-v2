@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { updatePhase, deletePhase, createTask, updateTask, deleteTask, uploadFile } from '@/lib/api/admin';
-import type { Phase } from '@/types/database';
+import { updatePhase, deletePhase, createTask, updateTask, deleteTask, uploadFile, updateProject, fetchPhases, fetchTasks } from '@/lib/api/admin';
+import type { Phase, Task as TaskType } from '@/types/database';
 import { TaskEditor } from './TaskEditor';
 import styles from '../editor.module.css';
 
@@ -140,9 +140,39 @@ export function PhaseEditor({ phase, phaseNumber, projectId, onRefresh }: PhaseE
   async function handleUpdateTask(taskId: string, updates: Partial<Task>) {
     try {
       await updateTask(taskId, updates);
+
+      // Recalculate overall_progress after task update
+      if ('completed' in updates) {
+        await recalculateProjectProgress(projectId);
+      }
+
       await onRefresh();
     } catch (err) {
       alert('Error updating task: ' + (err instanceof Error ? err.message : 'Unknown'));
+    }
+  }
+
+  // Calculate overall project progress based on completed tasks
+  async function recalculateProjectProgress(projId: string) {
+    try {
+      // Get all phases for this project
+      const phases = await fetchPhases(projId);
+
+      // Get all tasks for all phases
+      let totalTasks = 0;
+      let completedTasks = 0;
+
+      for (const p of phases) {
+        const tasks = await fetchTasks(p.id);
+        totalTasks += tasks.length;
+        completedTasks += tasks.filter((t: TaskType) => t.completed).length;
+      }
+
+      // Calculate and update progress
+      const newProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      await updateProject(projId, { overall_progress: newProgress });
+    } catch (err) {
+      console.error('Error recalculating project progress:', err);
     }
   }
 
