@@ -323,35 +323,24 @@ async function handleMigration(
 }
 
 export async function POST(request: NextRequest) {
-  console.log('[CRUD] ====== ROUTE HANDLER CALLED ======');
-  console.log('[CRUD] URL:', request.url);
-  console.log('[CRUD] Method:', request.method);
-
-  // NUCLEAR FIX: Inline JWT verification, no shared lib
+  // JWT verification
   const authHeader = request.headers.get('authorization');
-  console.log('[CRUD] Auth header exists:', !!authHeader);
 
   if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'No token' }, { status: 401 });
+    return NextResponse.json({ error: 'No authorization token' }, { status: 401 });
   }
 
   const token = authHeader.split(' ')[1];
-  console.log('[CRUD] Token first 20 chars:', token.substring(0, 20));
-
   const secret = process.env.JWT_SECRET;
-  console.log('[CRUD] Secret exists:', !!secret, 'length:', secret?.length);
 
   if (!secret) {
-    return NextResponse.json({ error: 'Server config error: no secret' }, { status: 500 });
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
 
   try {
-    const decoded = jwt.verify(token, secret);
-    console.log('[CRUD] Verification SUCCESS, decoded:', JSON.stringify(decoded));
-  } catch (err: unknown) {
-    const error = err as Error;
-    console.log('[CRUD] Verification FAILED:', error.message);
-    return NextResponse.json({ error: 'Invalid token', detail: error.message }, { status: 401 });
+    jwt.verify(token, secret);
+  } catch {
+    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
   }
 
   // Get Supabase admin client

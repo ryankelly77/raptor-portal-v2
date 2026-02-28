@@ -30,7 +30,6 @@ import type { CrudAction, CrudTable } from '@/types/api';
 
 function getAuthHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
-  console.log('[CLIENT] Token from sessionStorage:', token ? `${token.substring(0, 30)}...` : 'NULL');
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -38,19 +37,16 @@ function getAuthHeaders(): HeadersInit {
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
-  console.log('[CLIENT] Response status:', response.status);
   const data = await response.json();
-  console.log('[CLIENT] Response data:', JSON.stringify(data).substring(0, 200));
 
   if (!response.ok) {
     if (response.status === 401) {
-      console.error('[CLIENT] !!!! 401 ERROR !!!!');
-      console.error('[CLIENT] Response body:', JSON.stringify(data, null, 2));
-      console.error('[CLIENT] DO NOT REDIRECT - check console now');
-      // TEMPORARILY DISABLED REDIRECT FOR DEBUGGING
-      // sessionStorage.clear();
-      // window.location.href = '/admin';
-      throw new Error('Session expired - check console for details');
+      // Clear session and redirect to login
+      if (typeof window !== 'undefined') {
+        sessionStorage.clear();
+        window.location.href = '/admin/login';
+      }
+      throw new Error('Session expired');
     }
     throw new Error(data.error || `HTTP ${response.status}`);
   }
@@ -76,12 +72,9 @@ async function adminCrud<T>(
   options: CrudOptions = {}
 ): Promise<CrudResult<T>> {
   const { id, data, filters } = options;
-  console.log('[CLIENT] Calling /api/admin/crud:', { table, action });
-  const headers = getAuthHeaders();
-  console.log('[CLIENT] Headers being sent:', JSON.stringify(headers));
   const response = await fetch('/api/admin/crud', {
     method: 'POST',
-    headers,
+    headers: getAuthHeaders(),
     body: JSON.stringify({ table, action, id, data, filters }),
   });
   return handleResponse<CrudResult<T>>(response);

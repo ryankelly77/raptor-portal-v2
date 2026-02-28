@@ -91,11 +91,8 @@ export default function ProjectsListPage() {
 
   // Redirect to login if not authenticated
   useEffect(() => {
-    console.log('[PROJECTS PAGE] Auth state:', { authLoading, isAuthenticated });
     if (!authLoading && !isAuthenticated) {
-      console.log('[PROJECTS PAGE] Would redirect - BUT DISABLED FOR DEBUG');
-      // TEMPORARILY DISABLED FOR DEBUGGING
-      // router.replace('/admin/login');
+      router.replace('/admin/login');
     }
   }, [isAuthenticated, authLoading, router]);
 
@@ -107,7 +104,6 @@ export default function ProjectsListPage() {
   }, [isAuthenticated]);
 
   async function loadData() {
-    console.log('[PROJECTS PAGE] loadData() called');
     try {
       setLoading(true);
       setError(null);
@@ -122,7 +118,6 @@ export default function ProjectsListPage() {
       setProperties(propertiesData);
       setManagers(managersData);
     } catch (err) {
-      console.error('[PROJECTS PAGE] loadData error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);

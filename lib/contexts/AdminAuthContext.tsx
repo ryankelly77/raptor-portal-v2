@@ -36,14 +36,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        console.log('[AUTH CONTEXT] Login success, token received:', result.token?.substring(0, 30) + '...');
         sessionStorage.setItem('adminAuth', 'true');
         sessionStorage.setItem('adminToken', result.token);
-        console.log('[AUTH CONTEXT] Token saved to sessionStorage');
         setIsAuthenticated(true);
         return { success: true };
       } else {
-        console.log('[AUTH CONTEXT] Login failed:', result.error);
         return { success: false, error: result.error || 'Invalid password' };
       }
     } catch {
