@@ -118,6 +118,25 @@ export async function fetchPhases(projectId: string): Promise<Phase[]> {
   return result.data || [];
 }
 
+// Fetch phases with their tasks (like the original fetchProjectDetails)
+export async function fetchPhasesWithTasks(projectId: string): Promise<(Phase & { tasks: Task[] })[]> {
+  const phases = await fetchPhases(projectId);
+  if (phases.length === 0) return [];
+
+  // Fetch tasks for all phases in parallel
+  const phasesWithTasks = await Promise.all(
+    phases.map(async (phase) => {
+      const tasksResult = await adminCrud<Task[]>('tasks', 'read', { filters: { phase_id: phase.id } });
+      return {
+        ...phase,
+        tasks: tasksResult.data || [],
+      };
+    })
+  );
+
+  return phasesWithTasks;
+}
+
 export async function fetchPhase(id: string): Promise<Phase | null> {
   const result = await adminCrud<Phase>('phases', 'read', { id });
   return result.data || null;

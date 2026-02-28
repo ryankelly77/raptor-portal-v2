@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAdminAuth } from '@/lib/contexts/AdminAuthContext';
 import {
   fetchProject,
-  fetchPhases,
+  fetchPhasesWithTasks,
   fetchLocations,
   fetchProperties,
   fetchPropertyManagers,
@@ -113,12 +113,19 @@ export default function ProjectEditorPage() {
   const [activeTab, setActiveTab] = useState<'phases' | 'equipment' | 'activity'>('phases');
   const [editingProject, setEditingProject] = useState(false);
   const [projectForm, setProjectForm] = useState({
-    name: '',
-    status: 'planning' as Project['status'],
-    description: '',
-    target_install_date: '',
+    project_number: '',
+    configuration: '',
+    raptor_pm_name: '',
+    raptor_pm_email: '',
+    raptor_pm_phone: '',
+    estimated_completion: '',
+    overall_progress: 0,
+    is_active: true,
+    email_reminders_enabled: false,
+    reminder_email: '',
   });
   const [savingProject, setSavingProject] = useState(false);
+  const [savedProject, setSavedProject] = useState(false);
   const [showPhaseModal, setShowPhaseModal] = useState(false);
 
   // Derived data
@@ -144,7 +151,7 @@ export default function ProjectEditorPage() {
 
       const [projectData, phasesData, locationsData, propertiesData, managersData] = await Promise.all([
         fetchProject(projectId),
-        fetchPhases(projectId),
+        fetchPhasesWithTasks(projectId),
         fetchLocations(),
         fetchProperties(),
         fetchPropertyManagers(),
@@ -161,12 +168,18 @@ export default function ProjectEditorPage() {
       setProperties(propertiesData);
       setManagers(managersData);
 
-      // Initialize form
+      // Initialize form with all fields
       setProjectForm({
-        name: projectData.name || '',
-        status: projectData.status || 'planning',
-        description: projectData.description || '',
-        target_install_date: projectData.target_install_date || '',
+        project_number: projectData.project_number || '',
+        configuration: projectData.configuration || '',
+        raptor_pm_name: projectData.raptor_pm_name || '',
+        raptor_pm_email: projectData.raptor_pm_email || '',
+        raptor_pm_phone: projectData.raptor_pm_phone || '',
+        estimated_completion: projectData.estimated_completion || '',
+        overall_progress: projectData.overall_progress || 0,
+        is_active: projectData.is_active,
+        email_reminders_enabled: projectData.email_reminders_enabled || false,
+        reminder_email: projectData.reminder_email || '',
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load project');
@@ -184,15 +197,26 @@ export default function ProjectEditorPage() {
   async function handleSaveProject() {
     if (!project) return;
     setSavingProject(true);
+    setSavedProject(false);
     try {
       await updateProject(project.id, {
-        name: projectForm.name,
-        status: projectForm.status,
-        description: projectForm.description,
-        target_install_date: projectForm.target_install_date || null,
+        project_number: projectForm.project_number || null,
+        configuration: projectForm.configuration || null,
+        raptor_pm_name: projectForm.raptor_pm_name || null,
+        raptor_pm_email: projectForm.raptor_pm_email || null,
+        raptor_pm_phone: projectForm.raptor_pm_phone || null,
+        estimated_completion: projectForm.estimated_completion || null,
+        overall_progress: projectForm.overall_progress,
+        is_active: projectForm.is_active,
+        email_reminders_enabled: projectForm.email_reminders_enabled,
+        reminder_email: projectForm.reminder_email || null,
       });
+      setSavedProject(true);
+      setTimeout(() => {
+        setSavedProject(false);
+        setEditingProject(false);
+      }, 1000);
       await loadData();
-      setEditingProject(false);
     } catch (err) {
       alert('Error saving project: ' + (err instanceof Error ? err.message : 'Unknown'));
     } finally {
@@ -359,10 +383,10 @@ export default function ProjectEditorPage() {
                     </svg>
                     Back to Projects
                   </button>
-                  <h2 className={styles.pageTitle}>{project.name}</h2>
+                  <h2 className={styles.pageTitle}>{project.project_number || project.name}</h2>
                   <div className={styles.headerActions}>
                     <a
-                      href={`/project/${project.id}`}
+                      href={`/project/${project.public_token}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className={styles.btnSecondary}
@@ -371,7 +395,7 @@ export default function ProjectEditorPage() {
                     </a>
                     <button
                       className={styles.btnSecondary}
-                      onClick={() => copyToClipboard(`${window.location.origin}/project/${project.id}`, 'Public link')}
+                      onClick={() => copyToClipboard(`${window.location.origin}/project/${project.public_token}`, 'Public link')}
                     >
                       Copy Public Link
                     </button>
@@ -405,7 +429,7 @@ export default function ProjectEditorPage() {
                     ) : (
                       <div className={styles.btnGroup}>
                         <button className={styles.btnSave} onClick={handleSaveProject} disabled={savingProject}>
-                          {savingProject ? 'Saving...' : 'Save'}
+                          {savingProject ? 'Saving...' : savedProject ? '✓ Saved' : 'Save'}
                         </button>
                         <button
                           className={styles.btnCancel}
@@ -424,43 +448,96 @@ export default function ProjectEditorPage() {
                           <label className={styles.formLabel}>Project Number</label>
                           <input
                             className={styles.formInput}
-                            value={projectForm.name}
-                            onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                            value={projectForm.project_number}
+                            onChange={(e) => setProjectForm({ ...projectForm, project_number: e.target.value })}
                           />
                         </div>
                         <div className={styles.formGroup}>
-                          <label className={styles.formLabel}>Status</label>
-                          <select
-                            className={styles.formSelect}
-                            value={projectForm.status}
-                            onChange={(e) =>
-                              setProjectForm({ ...projectForm, status: e.target.value as Project['status'] })
-                            }
-                          >
-                            <option value="planning">Planning</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="completed">Completed</option>
-                            <option value="on_hold">On Hold</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                        </div>
-                        <div className={styles.formGroup}>
-                          <label className={styles.formLabel}>Target Install Date</label>
-                          <input
-                            type="date"
-                            className={styles.formInput}
-                            value={projectForm.target_install_date}
-                            onChange={(e) => setProjectForm({ ...projectForm, target_install_date: e.target.value })}
-                          />
-                        </div>
-                        <div className={`${styles.formGroup} ${styles.fullWidth}`}>
                           <label className={styles.formLabel}>Configuration</label>
                           <input
                             className={styles.formInput}
-                            value={projectForm.description}
-                            onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                            value={projectForm.configuration}
+                            onChange={(e) => setProjectForm({ ...projectForm, configuration: e.target.value })}
                           />
                         </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.formLabel}>Raptor PM Name</label>
+                          <input
+                            className={styles.formInput}
+                            value={projectForm.raptor_pm_name}
+                            onChange={(e) => setProjectForm({ ...projectForm, raptor_pm_name: e.target.value })}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.formLabel}>Raptor PM Email</label>
+                          <input
+                            className={styles.formInput}
+                            value={projectForm.raptor_pm_email}
+                            onChange={(e) => setProjectForm({ ...projectForm, raptor_pm_email: e.target.value })}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.formLabel}>Raptor PM Phone</label>
+                          <input
+                            className={styles.formInput}
+                            value={projectForm.raptor_pm_phone}
+                            onChange={(e) => setProjectForm({ ...projectForm, raptor_pm_phone: e.target.value })}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.formLabel}>Est. Completion</label>
+                          <input
+                            type="date"
+                            className={styles.formInput}
+                            value={projectForm.estimated_completion}
+                            onChange={(e) => setProjectForm({ ...projectForm, estimated_completion: e.target.value })}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.formLabel}>Overall Progress (%)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            className={styles.formInput}
+                            value={projectForm.overall_progress}
+                            onChange={(e) => setProjectForm({ ...projectForm, overall_progress: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.formLabel}>Active</label>
+                          <select
+                            className={styles.formSelect}
+                            value={projectForm.is_active ? 'true' : 'false'}
+                            onChange={(e) => setProjectForm({ ...projectForm, is_active: e.target.value === 'true' })}
+                          >
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                          </select>
+                        </div>
+                        <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                          <label className={styles.toggleLabel}>
+                            <input
+                              type="checkbox"
+                              checked={projectForm.email_reminders_enabled}
+                              onChange={(e) => setProjectForm({ ...projectForm, email_reminders_enabled: e.target.checked })}
+                            />
+                            Email Reminders {projectForm.email_reminders_enabled ? 'ON' : 'OFF'}
+                          </label>
+                        </div>
+                        {projectForm.email_reminders_enabled && (
+                          <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                            <label className={styles.formLabel}>Reminder Email (optional override)</label>
+                            <input
+                              type="email"
+                              className={styles.formInput}
+                              placeholder={propertyManager?.email || 'Uses property manager email'}
+                              value={projectForm.reminder_email}
+                              onChange={(e) => setProjectForm({ ...projectForm, reminder_email: e.target.value })}
+                            />
+                            <span className={styles.formHint}>Leave blank to use property manager&apos;s email</span>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className={styles.detailsGrid}>
@@ -476,13 +553,67 @@ export default function ProjectEditorPage() {
                           {propertyManager?.company ? ` (${propertyManager.company})` : ''}
                         </div>
                         <div>
-                          <strong>Configuration:</strong> {project.description || 'Not set'}
+                          <strong>Configuration:</strong> {project.configuration || 'Not set'}
                         </div>
                         <div>
-                          <strong>Target Install:</strong> {project.target_install_date || 'Not set'}
+                          <strong>Est. Completion:</strong> {project.estimated_completion || 'Not set'}
                         </div>
                         <div>
-                          <strong>Status:</strong> {project.status}
+                          <strong>Progress:</strong> {project.overall_progress}%
+                          <button
+                            className={styles.btnSmall}
+                            onClick={async () => {
+                              // Recalculate progress based on tasks
+                              let total = 0, done = 0;
+                              phases.forEach(phase => {
+                                phase.tasks?.forEach(task => {
+                                  total++;
+                                  if (task.completed) done++;
+                                });
+                              });
+                              const newProgress = total > 0 ? Math.round((done / total) * 100) : 0;
+                              await updateProject(project.id, { overall_progress: newProgress });
+                              await loadData();
+                            }}
+                            style={{ marginLeft: '10px' }}
+                          >
+                            Recalculate
+                          </button>
+                        </div>
+                        <div>
+                          <strong>Public Token:</strong> <code>{project.public_token}</code>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <strong>Email Reminders:</strong>{' '}
+                          <span className={project.email_reminders_enabled ? styles.reminderOn : styles.reminderOff}>
+                            {project.email_reminders_enabled ? 'ON' : 'OFF'}
+                          </span>
+                          <button
+                            className={styles.btnSmall}
+                            onClick={async () => {
+                              if (!window.confirm('Send reminder email for this project now?')) return;
+                              try {
+                                const response = await fetch('/api/cron/send-reminders', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': 'Bearer ' + sessionStorage.getItem('adminToken'),
+                                  },
+                                  body: JSON.stringify({ projectId: project.id, force: true }),
+                                });
+                                const data = await response.json();
+                                if (data.success) {
+                                  alert('Reminder sent successfully!');
+                                } else {
+                                  alert('Error: ' + (data.error || 'Failed to send'));
+                                }
+                              } catch (err) {
+                                alert('Failed: ' + (err instanceof Error ? err.message : 'Unknown'));
+                              }
+                            }}
+                          >
+                            Send Reminder Now
+                          </button>
                         </div>
                       </div>
                     )}

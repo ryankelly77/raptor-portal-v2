@@ -194,6 +194,28 @@
   color: #6b7280;
 }
 
+.reminderOn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.reminderOff {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
 /* Buttons */
 .btnPrimary {
   padding: 10px 20px;

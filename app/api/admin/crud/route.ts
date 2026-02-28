@@ -19,6 +19,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
       'overall_progress', 'estimated_completion', 'configuration',
       'employee_count', 'email_reminders_enabled', 'reminder_email',
       'last_reminder_sent', 'survey_clicks', 'survey_completions',
+      'survey_token', 'raptor_pm_name', 'raptor_pm_email', 'raptor_pm_phone',
     ],
     requiredForCreate: ['property_id', 'name'],
     orderBy: { column: 'created_at', ascending: false },

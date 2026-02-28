@@ -59,6 +59,7 @@ export interface Project {
   notes: string | null;
   raptor_pm_name: string | null;
   raptor_pm_email: string | null;
+  raptor_pm_phone: string | null;
   email_reminders_enabled: boolean;
   reminder_email: string | null;
   last_reminder_sent: string | null;
