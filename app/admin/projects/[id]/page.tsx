@@ -21,11 +21,17 @@ import { ActivityLogPanel } from './components/ActivityLogPanel';
 import styles from './editor.module.css';
 import adminStyles from '../../admin.module.css';
 
-// Navigation items
+// Navigation items - full list matching dashboard
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
   { href: '/admin/projects', label: 'Projects', icon: 'projects' },
+  { href: '/admin/property-managers', label: 'Property Managers', icon: 'users' },
   { href: '/admin/messages', label: 'Messages', icon: 'messages' },
+  { href: '/admin/documents', label: 'Documents', icon: 'documents' },
+  { href: '/admin/templates', label: 'Email Templates', icon: 'templates' },
+  { href: '/admin/activity', label: 'Activity Log', icon: 'activity' },
+  { href: '/admin/temperature', label: 'Temp Logs', icon: 'temperature' },
+  { href: '/admin/migrations', label: 'Migrations', icon: 'database' },
 ];
 
 function NavIcon({ name }: { name: string }) {
@@ -45,26 +51,53 @@ function NavIcon({ name }: { name: string }) {
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
       );
-    case 'equipment':
+    case 'users':
       return (
         <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-        </svg>
-      );
-    case 'surveys':
-      return (
-        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       );
     case 'messages':
       return (
         <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      );
+    case 'documents':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      );
+    case 'templates':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+          <polyline points="22,6 12,13 2,6" />
+        </svg>
+      );
+    case 'activity':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      );
+    case 'temperature':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+        </svg>
+      );
+    case 'database':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <ellipse cx="12" cy="5" rx="9" ry="3" />
+          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
         </svg>
       );
     default:
@@ -163,6 +196,8 @@ export default function ProjectEditorPage() {
       }
 
       setProject(projectData);
+      // DEBUG: Log raw phase data to check status values
+      console.log('RAW PHASES:', JSON.stringify(phasesData.map((p: PhaseWithTasks) => ({ title: p.title, status: p.status }))));
       setPhases(phasesData as PhaseWithTasks[]);
       setLocations(locationsData);
       setProperties(propertiesData);

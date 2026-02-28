@@ -333,6 +333,14 @@ export async function markPmMessagesAsRead(pmId: string): Promise<boolean> {
   return true;
 }
 
+export async function deletePmMessagesByPm(pmId: string): Promise<boolean> {
+  const messages = await fetchPmMessagesByPm(pmId);
+  for (const msg of messages) {
+    await adminCrud('pm_messages', 'delete', { id: msg.id });
+  }
+  return true;
+}
+
 // ============================================
 // GLOBAL DOCUMENTS API
 // ============================================
