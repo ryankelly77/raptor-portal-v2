@@ -16,7 +16,25 @@ interface ActivityLog {
   created_at: string;
 }
 
-interface Project {
+interface RawProject {
+  id: string;
+  project_number: string | null;
+  property_id: string;
+  location_id: string | null;
+}
+
+interface Property {
+  id: string;
+  name: string;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  property_id: string;
+}
+
+interface EnrichedProject {
   id: string;
   project_number: string;
   property_name: string;
@@ -36,7 +54,7 @@ const ITEMS_PER_PAGE = 25;
 
 export default function ActivityPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<EnrichedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
 
@@ -50,22 +68,57 @@ export default function ActivityPage() {
     try {
       setLoading(true);
 
-      // Load projects
-      const projectsRes = await fetch('/api/admin/crud', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ table: 'projects', action: 'read' }),
-      });
-      const projectsData = await projectsRes.json();
-      setProjects(projectsData.data || []);
+      // Load all data in parallel
+      const [projectsRes, propertiesRes, locationsRes, logsRes] = await Promise.all([
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'projects', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'properties', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'locations', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'activity_logs', action: 'read' }),
+        }),
+      ]);
 
-      // Load activity logs
-      const logsRes = await fetch('/api/admin/crud', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ table: 'activity_logs', action: 'read' }),
+      const [projectsData, propertiesData, locationsData, logsData] = await Promise.all([
+        projectsRes.json(),
+        propertiesRes.json(),
+        locationsRes.json(),
+        logsRes.json(),
+      ]);
+
+      const rawProjects: RawProject[] = projectsData.data || [];
+      const properties: Property[] = propertiesData.data || [];
+      const locations: Location[] = locationsData.data || [];
+
+      // Enrich projects with related data
+      const enrichedProjects: EnrichedProject[] = rawProjects.map((project) => {
+        const location = locations.find((l) => l.id === project.location_id);
+        const property = location
+          ? properties.find((p) => p.id === location.property_id)
+          : properties.find((p) => p.id === project.property_id);
+
+        return {
+          id: project.id,
+          project_number: project.project_number || 'N/A',
+          property_name: property?.name || 'Unknown Property',
+          location_name: location?.name || 'Unknown Location',
+        };
       });
-      const logsData = await logsRes.json();
+
+      setProjects(enrichedProjects);
       setLogs(logsData.data || []);
     } catch (err) {
       console.error('Error loading data:', err);

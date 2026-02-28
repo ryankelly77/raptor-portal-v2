@@ -139,18 +139,20 @@ export default function ProjectsListPage() {
   // Filter projects
   const filteredProjects = useMemo(() => {
     return enrichedProjects.filter((project) => {
-      // Status filter
-      if (statusFilter === 'active' && project.status !== 'in_progress') return false;
-      if (statusFilter === 'inactive' && project.status === 'in_progress') return false;
+      // Status filter - use is_active field
+      if (statusFilter === 'active' && !project.is_active) return false;
+      if (statusFilter === 'inactive' && project.is_active) return false;
 
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matchesName = project.name?.toLowerCase().includes(query);
+        const matchesNumber = project.project_number?.toLowerCase().includes(query);
         const matchesProperty = project.property?.name?.toLowerCase().includes(query);
         const matchesLocation = project.location?.name?.toLowerCase().includes(query);
         const matchesPM = project.propertyManager?.name?.toLowerCase().includes(query);
-        if (!matchesName && !matchesProperty && !matchesLocation && !matchesPM) return false;
+        const matchesConfig = project.configuration?.toLowerCase().includes(query);
+        if (!matchesName && !matchesNumber && !matchesProperty && !matchesLocation && !matchesPM && !matchesConfig) return false;
       }
 
       return true;
@@ -334,11 +336,11 @@ export default function ProjectsListPage() {
                       </button>
                     </div>
                     <div className={styles.cardHeader}>
-                      <span className={styles.projectNumber}>{project.name}</span>
+                      <span className={styles.projectNumber}>{project.project_number || project.name || 'Unnamed'}</span>
                       <span
-                        className={`${styles.statusBadge} ${project.status === 'in_progress' ? styles.active : styles.inactive}`}
+                        className={`${styles.statusBadge} ${project.is_active ? styles.active : styles.inactive}`}
                       >
-                        {project.status === 'in_progress' ? 'Active' : project.status}
+                        {project.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </div>
                     <div className={styles.cardBody}>
@@ -347,11 +349,14 @@ export default function ProjectsListPage() {
                       {project.propertyManager && (
                         <p className={styles.pmName}>PM: {project.propertyManager.name}</p>
                       )}
+                      {project.configuration && (
+                        <p className={styles.configText}>{project.configuration}</p>
+                      )}
                       <div className={styles.progressBar}>
                         <div className={styles.progressTrack}>
-                          <div className={styles.progressFill} style={{ width: '0%' }} />
+                          <div className={styles.progressFill} style={{ width: `${project.overall_progress || 0}%` }} />
                         </div>
-                        <span className={styles.progressText}>0%</span>
+                        <span className={styles.progressText}>{project.overall_progress || 0}%</span>
                       </div>
                     </div>
                   </div>

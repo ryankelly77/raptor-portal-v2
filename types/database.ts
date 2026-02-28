@@ -32,6 +32,8 @@ export interface Location {
   property_id: string;
   name: string;
   floor: string | null;
+  employee_count: number | null;
+  images: string[] | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -44,11 +46,25 @@ export interface Project {
   property_id: string;
   location_id: string | null;
   name: string;
+  project_number: string | null;
+  public_token: string;
   status: ProjectStatus;
+  is_active: boolean;
   description: string | null;
+  configuration: string | null;
   target_install_date: string | null;
   actual_install_date: string | null;
+  estimated_completion: string | null;
+  overall_progress: number;
   notes: string | null;
+  raptor_pm_name: string | null;
+  raptor_pm_email: string | null;
+  email_reminders_enabled: boolean;
+  reminder_email: string | null;
+  last_reminder_sent: string | null;
+  survey_clicks: number;
+  survey_completions: number;
+  employee_count: number | null;
   created_at: string;
   updated_at: string;
   property_manager_id: string | null;
@@ -245,16 +261,17 @@ export interface PropertyWithLocations extends Property {
 }
 
 // Insert types (for creating new records)
-export type PropertyManagerInsert = Omit<PropertyManager, 'id' | 'created_at' | 'updated_at'>;
-export type PropertyInsert = Omit<Property, 'id' | 'created_at' | 'updated_at'>;
-export type LocationInsert = Omit<Location, 'id' | 'created_at' | 'updated_at'>;
-export type ProjectInsert = Omit<Project, 'id' | 'created_at' | 'updated_at'>;
-export type PhaseInsert = Omit<Phase, 'id' | 'created_at' | 'updated_at'>;
-export type TaskInsert = Omit<Task, 'id' | 'created_at' | 'updated_at'>;
-export type EquipmentInsert = Omit<Equipment, 'id' | 'created_at' | 'updated_at'>;
-export type DriverInsert = Omit<Driver, 'id' | 'created_at' | 'updated_at'>;
-export type GlobalDocumentInsert = Omit<GlobalDocument, 'id' | 'created_at' | 'updated_at'>;
-export type EmailTemplateInsert = Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at'>;
+// Only required fields are mandatory, others are optional (CRUD route provides defaults)
+export type PropertyManagerInsert = Pick<PropertyManager, 'name' | 'access_token'> & Partial<Omit<PropertyManager, 'id' | 'created_at' | 'updated_at' | 'name' | 'access_token'>>;
+export type PropertyInsert = Pick<Property, 'name'> & Partial<Omit<Property, 'id' | 'created_at' | 'updated_at' | 'name'>>;
+export type LocationInsert = Pick<Location, 'name' | 'property_id'> & Partial<Omit<Location, 'id' | 'created_at' | 'updated_at' | 'name' | 'property_id'>>;
+export type ProjectInsert = Pick<Project, 'property_id' | 'name'> & Partial<Omit<Project, 'id' | 'created_at' | 'updated_at' | 'property_id' | 'name' | 'public_token'>>;
+export type PhaseInsert = Pick<Phase, 'project_id' | 'title'> & Partial<Omit<Phase, 'id' | 'created_at' | 'updated_at' | 'project_id' | 'title'>>;
+export type TaskInsert = Pick<Task, 'phase_id' | 'label'> & Partial<Omit<Task, 'id' | 'created_at' | 'updated_at' | 'phase_id' | 'label'>>;
+export type EquipmentInsert = Pick<Equipment, 'project_id' | 'name'> & Partial<Omit<Equipment, 'id' | 'created_at' | 'updated_at' | 'project_id' | 'name'>>;
+export type DriverInsert = Pick<Driver, 'name'> & Partial<Omit<Driver, 'id' | 'created_at' | 'updated_at' | 'name'>>;
+export type GlobalDocumentInsert = Pick<GlobalDocument, 'label'> & Partial<Omit<GlobalDocument, 'id' | 'created_at' | 'updated_at' | 'label'>>;
+export type EmailTemplateInsert = Pick<EmailTemplate, 'name'> & Partial<Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at' | 'name'>>;
 
 // Update types (all fields optional except id)
 export type PropertyManagerUpdate = Partial<Omit<PropertyManager, 'id' | 'created_at' | 'updated_at'>>;

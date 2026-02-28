@@ -131,6 +131,8 @@ export function CreateProjectModal({
         name: newLocation.name,
         property_id: selectedPropertyId,
         floor: newLocation.floor || null,
+        employee_count: null,
+        images: null,
         notes: null,
       });
       setSelectedLocationId(created.id);

@@ -193,6 +193,13 @@
   margin: 0 0 12px;
 }
 
+.configText {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0 0 12px;
+  font-style: italic;
+}
+
 .progressBar {
   display: flex;
   align-items: center;

@@ -14,7 +14,32 @@ interface Message {
   created_at: string;
 }
 
-interface Project {
+interface RawProject {
+  id: string;
+  project_number: string | null;
+  property_id: string;
+  location_id: string | null;
+  property_manager_id: string | null;
+}
+
+interface Property {
+  id: string;
+  name: string;
+  property_manager_id: string | null;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  property_id: string;
+}
+
+interface PropertyManager {
+  id: string;
+  name: string;
+}
+
+interface EnrichedProject {
   id: string;
   project_number: string;
   property_name: string;
@@ -23,7 +48,7 @@ interface Project {
 }
 
 interface Conversation {
-  project: Project;
+  project: EnrichedProject;
   messages: Message[];
   unreadCount: number;
   lastMessage: Message | null;
@@ -49,28 +74,74 @@ export default function MessagesPage() {
 
   const loadData = useCallback(async () => {
     try {
-      // Load projects
-      const projectsRes = await fetch('/api/admin/crud', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ table: 'projects', action: 'read' }),
-      });
-      const projectsData = await projectsRes.json();
-      const projects: Project[] = projectsData.data || [];
+      // Load all data in parallel
+      const [projectsRes, propertiesRes, locationsRes, managersRes, messagesRes] = await Promise.all([
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'projects', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'properties', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'locations', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'property_managers', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'messages', action: 'read' }),
+        }),
+      ]);
 
-      // Load all messages
-      const messagesRes = await fetch('/api/admin/crud', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ table: 'messages', action: 'read' }),
-      });
-      const messagesData = await messagesRes.json();
+      const [projectsData, propertiesData, locationsData, managersData, messagesData] = await Promise.all([
+        projectsRes.json(),
+        propertiesRes.json(),
+        locationsRes.json(),
+        managersRes.json(),
+        messagesRes.json(),
+      ]);
+
+      const rawProjects: RawProject[] = projectsData.data || [];
+      const properties: Property[] = propertiesData.data || [];
+      const locations: Location[] = locationsData.data || [];
+      const managers: PropertyManager[] = managersData.data || [];
       const messages: Message[] = messagesData.data || [];
+
+      // Enrich projects with related data
+      const enrichedProjects: EnrichedProject[] = rawProjects.map((project) => {
+        const location = locations.find((l) => l.id === project.location_id);
+        const property = location
+          ? properties.find((p) => p.id === location.property_id)
+          : properties.find((p) => p.id === project.property_id);
+        const manager = property
+          ? managers.find((m) => m.id === property.property_manager_id)
+          : project.property_manager_id
+          ? managers.find((m) => m.id === project.property_manager_id)
+          : null;
+
+        return {
+          id: project.id,
+          project_number: project.project_number || 'N/A',
+          property_name: property?.name || 'Unknown Property',
+          location_name: location?.name || 'Unknown Location',
+          pm_name: manager?.name || 'Unknown PM',
+        };
+      });
 
       // Group messages by project
       const conversationsMap = new Map<string, Conversation>();
 
-      projects.forEach((project) => {
+      enrichedProjects.forEach((project) => {
         const projectMessages = messages
           .filter((m) => m.project_id === project.id)
           .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
