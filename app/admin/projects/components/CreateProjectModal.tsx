@@ -166,7 +166,7 @@ export function CreateProjectModal({
         {
           phase_number: 1,
           title: 'Site Assessment & Planning',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Site survey to identify optimal placement.',
           tasks: [
             'Initial site survey and measurements',
@@ -180,14 +180,14 @@ export function CreateProjectModal({
         {
           phase_number: 2,
           title: 'Contract Signature',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Service agreement reviewed and signed.',
           tasks: ['Agreement sent for review', 'Contract signed and returned'],
         },
         {
           phase_number: 3,
           title: 'Employee Preference Survey',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Survey distributed to building employees.',
           tasks: [
             'Survey link distributed to property management',
@@ -201,7 +201,7 @@ export function CreateProjectModal({
         {
           phase_number: 4,
           title: 'Electrical & Networking Preparation',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Property responsible for infrastructure prep.',
           tasks: [
             'Electrical & networking specs provided',
@@ -213,7 +213,7 @@ export function CreateProjectModal({
         {
           phase_number: 5,
           title: 'Building Access & Coordination',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Final coordination with property management.',
           tasks: [
             '[PM] Raptor Vending added to approved vendor list',
@@ -229,7 +229,7 @@ export function CreateProjectModal({
         {
           phase_number: 6,
           title: 'Equipment Ordering & Delivery',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Equipment ordered and delivery scheduled.',
           tasks: [
             '[ADMIN-EQUIPMENT] SmartFridge and SmartCooker ordered',
@@ -244,7 +244,7 @@ export function CreateProjectModal({
         {
           phase_number: 7,
           title: 'System Installation & Integration',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Equipment delivery and installation.',
           tasks: [
             'Smart Fridge units positioning',
@@ -257,7 +257,7 @@ export function CreateProjectModal({
         {
           phase_number: 8,
           title: 'Testing, Stocking & Launch',
-          status: 'not_started' as const,
+          status: 'pending' as const,
           description: 'Full system testing and launch.',
           tasks: [
             'AI vision system calibration',

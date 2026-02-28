@@ -220,7 +220,7 @@ export default function ProjectEditorPage() {
         project_id: project.id,
         title: phaseData.title,
         phase_number: phases.length + 1,
-        status: 'not_started',
+        status: 'pending',
         description: phaseData.description,
         start_date: null,
         end_date: null,

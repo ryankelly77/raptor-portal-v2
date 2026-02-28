@@ -217,7 +217,7 @@ export function PMPortalContent({ initialData, token }: PMPortalContentProps) {
           </>
         ) : (
           <PMMessagesView
-            pmId={data.properties[0]?.id || ''}
+            pmId={data.propertyManager.id}
             pmName={data.propertyManager.name}
             onMessagesRead={() => {}}
           />

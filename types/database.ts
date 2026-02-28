@@ -70,7 +70,8 @@ export interface Project {
   property_manager_id: string | null;
 }
 
-export type PhaseStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked';
+// Support both original CRA values (pending, in-progress) and any legacy values (not_started, in_progress)
+export type PhaseStatus = 'pending' | 'not_started' | 'in-progress' | 'in_progress' | 'completed' | 'blocked';
 
 export interface Phase {
   id: string;

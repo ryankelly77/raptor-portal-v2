@@ -131,6 +131,7 @@ export interface PMPortalProperty {
 
 export interface PMPortalData {
   propertyManager: {
+    id: string;
     name: string;
     email: string | null;
     company: string | null;
@@ -378,6 +379,7 @@ export async function fetchProjectsByPMToken(accessToken: string): Promise<PMPor
 
   return {
     propertyManager: {
+      id: pm.id as string,
       name: pm.name as string,
       email: pm.email as string | null,
       company: pm.company as string | null,

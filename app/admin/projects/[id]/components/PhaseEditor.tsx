@@ -39,7 +39,7 @@ interface PhaseEditorProps {
 }
 
 export function PhaseEditor({ phase, phaseNumber, projectId, onRefresh }: PhaseEditorProps) {
-  const [expanded, setExpanded] = useState(phase.status === 'in_progress');
+  const [expanded, setExpanded] = useState(phase.status === 'in-progress');
   const [form, setForm] = useState({
     title: phase.title,
     status: phase.status,
@@ -63,7 +63,7 @@ export function PhaseEditor({ phase, phaseNumber, projectId, onRefresh }: PhaseE
   const statusClass =
     phase.status === 'completed'
       ? styles.completed
-      : phase.status === 'in_progress'
+      : (phase.status === 'in_progress' || phase.status === 'in-progress')
         ? styles.inProgress
         : styles.pending;
 
@@ -225,7 +225,7 @@ export function PhaseEditor({ phase, phaseNumber, projectId, onRefresh }: PhaseE
         <span className={styles.phaseNumber}>{phaseNumber}</span>
         <span className={styles.phaseTitle}>{phase.title}</span>
         <span className={`${styles.phaseStatusBadge} ${statusClass}`}>
-          {phase.status === 'not_started' ? 'Pending' : phase.status === 'in_progress' ? 'In Progress' : 'Completed'}
+          {(phase.status === 'not_started' || phase.status === 'pending') ? 'Pending' : (phase.status === 'in_progress' || phase.status === 'in-progress') ? 'In Progress' : 'Completed'}
         </span>
         <span className={styles.expandIcon}>{expanded ? '▼' : '▶'}</span>
       </div>
