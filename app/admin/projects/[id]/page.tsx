@@ -198,6 +198,13 @@ export default function ProjectEditorPage() {
       setProject(projectData);
       // DEBUG: Log raw phase data to check status values
       console.log('RAW PHASES:', JSON.stringify(phasesData.map((p: PhaseWithTasks) => ({ title: p.title, status: p.status }))));
+      // DEBUG: Log project tokens to verify correct token is being used
+      console.log('PROJECT TOKENS:', JSON.stringify({
+        id: projectData.id,
+        public_token: projectData.public_token,
+        project_number: projectData.project_number,
+        overall_progress: projectData.overall_progress,
+      }));
       setPhases(phasesData as PhaseWithTasks[]);
       setLocations(locationsData);
       setProperties(propertiesData);
@@ -593,8 +600,17 @@ export default function ProjectEditorPage() {
                         <div>
                           <strong>Est. Completion:</strong> {project.estimated_completion || 'Not set'}
                         </div>
-                        <div>
-                          <strong>Progress:</strong> {project.overall_progress}%
+                        <div className={styles.progressRow}>
+                          <strong>Progress:</strong>
+                          <div className={styles.progressBarContainer}>
+                            <div className={styles.progressBar}>
+                              <div
+                                className={styles.progressFill}
+                                style={{ width: `${project.overall_progress ?? 0}%` }}
+                              />
+                            </div>
+                            <span className={styles.progressText}>{project.overall_progress ?? 0}%</span>
+                          </div>
                           <button
                             className={styles.btnSmall}
                             onClick={async () => {
@@ -610,7 +626,6 @@ export default function ProjectEditorPage() {
                               await updateProject(project.id, { overall_progress: newProgress });
                               await loadData();
                             }}
-                            style={{ marginLeft: '10px' }}
                           >
                             Recalculate
                           </button>

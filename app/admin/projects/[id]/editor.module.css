@@ -216,6 +216,46 @@
   color: #6b7280;
 }
 
+/* Progress Bar */
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.progressBarContainer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.progressBar {
+  flex: 1;
+  height: 10px;
+  background-color: #e5e7eb;
+  border-radius: 5px;
+  overflow: hidden;
+  min-width: 100px;
+  max-width: 200px;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #f97316, #ea580c);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.progressText {
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+  min-width: 45px;
+}
+
 /* Buttons */
 .btnPrimary {
   padding: 10px 20px;
