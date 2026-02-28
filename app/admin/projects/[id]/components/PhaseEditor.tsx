@@ -31,14 +31,21 @@ interface PhaseWithTasks extends Phase {
   tasks?: Task[];
 }
 
+interface SurveyData {
+  survey_token: string | null;
+  survey_clicks: number;
+  survey_completions: number;
+}
+
 interface PhaseEditorProps {
   phase: PhaseWithTasks;
   phaseNumber: number;
   projectId: string;
+  surveyData?: SurveyData;
   onRefresh: () => Promise<void>;
 }
 
-export function PhaseEditor({ phase, phaseNumber, projectId, onRefresh }: PhaseEditorProps) {
+export function PhaseEditor({ phase, phaseNumber, projectId, surveyData, onRefresh }: PhaseEditorProps) {
   const [expanded, setExpanded] = useState(phase.status === 'in-progress');
   const [form, setForm] = useState({
     title: phase.title,
@@ -368,6 +375,111 @@ export function PhaseEditor({ phase, phaseNumber, projectId, onRefresh }: PhaseE
                   >
                     {uploading ? 'Uploading...' : 'Upload Document'}
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Survey Link Section - only for survey phases */}
+          {phase.title.toLowerCase().includes('survey') && surveyData && (
+            <div style={{
+              background: '#FFF3E0',
+              border: '1px solid #FFE0B2',
+              borderRadius: '8px',
+              padding: '15px',
+              marginBottom: '16px'
+            }}>
+              <h4 style={{ margin: '0 0 10px 0', color: '#E65100', fontSize: '14px', fontWeight: '600' }}>
+                Trackable Survey Link
+              </h4>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  readOnly
+                  value={surveyData.survey_token
+                    ? `${process.env.NEXT_PUBLIC_PORTAL_URL || window.location.origin}/survey/${surveyData.survey_token}`
+                    : 'No token generated'}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: '1px solid #FFE0B2',
+                    fontFamily: 'monospace',
+                    fontSize: '0.85em',
+                    background: 'white'
+                  }}
+                />
+                <button
+                  className={styles.btnSecondary}
+                  onClick={async () => {
+                    if (!surveyData.survey_token) {
+                      // Generate a new survey token
+                      const token = Math.random().toString(36).substring(2, 15);
+                      await updateProject(projectId, { survey_token: token });
+                      await onRefresh();
+                    } else {
+                      // Copy to clipboard
+                      const url = `${process.env.NEXT_PUBLIC_PORTAL_URL || window.location.origin}/survey/${surveyData.survey_token}`;
+                      await navigator.clipboard.writeText(url);
+                      alert('Copied to clipboard!');
+                    }
+                  }}
+                >
+                  {surveyData.survey_token ? 'Copy' : 'Generate'}
+                </button>
+              </div>
+              {surveyData.survey_token && (
+                <div style={{
+                  display: 'flex',
+                  gap: '24px',
+                  marginTop: '12px',
+                  fontSize: '0.85em',
+                  color: '#666'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Clicks:</span>
+                    <strong>{surveyData.survey_clicks || 0}</strong>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '0.85em',
+                        color: '#999',
+                        cursor: 'pointer',
+                        textDecoration: 'underline'
+                      }}
+                      onClick={async () => {
+                        if (window.confirm('Reset click count to 0?')) {
+                          await updateProject(projectId, { survey_clicks: 0 });
+                          await onRefresh();
+                        }
+                      }}
+                    >
+                      (reset)
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Completed:</span>
+                    <strong>{surveyData.survey_completions || 0}</strong>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '0.85em',
+                        color: '#999',
+                        cursor: 'pointer',
+                        textDecoration: 'underline'
+                      }}
+                      onClick={async () => {
+                        if (window.confirm('Reset completed count to 0?')) {
+                          await updateProject(projectId, { survey_completions: 0 });
+                          await onRefresh();
+                        }
+                      }}
+                    >
+                      (reset)
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

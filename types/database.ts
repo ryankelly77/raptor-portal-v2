@@ -62,6 +62,7 @@ export interface Project {
   email_reminders_enabled: boolean;
   reminder_email: string | null;
   last_reminder_sent: string | null;
+  survey_token: string | null;
   survey_clicks: number;
   survey_completions: number;
   employee_count: number | null;

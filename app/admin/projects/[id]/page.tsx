@@ -527,6 +527,11 @@ export default function ProjectEditorPage() {
                           phase={phase}
                           phaseNumber={idx + 1}
                           projectId={project.id}
+                          surveyData={{
+                            survey_token: project.survey_token,
+                            survey_clicks: project.survey_clicks,
+                            survey_completions: project.survey_completions,
+                          }}
                           onRefresh={loadData}
                         />
                       ))}

@@ -165,6 +165,22 @@
   background-color: #ede9fe;
 }
 
+.activityIcon.email {
+  background-color: #cffafe;
+}
+
+.activityIcon.emailDelivered {
+  background-color: #d1fae5;
+}
+
+.activityIcon.emailOpened {
+  background-color: #ede9fe;
+}
+
+.activityIcon.emailClicked {
+  background-color: #fee2e2;
+}
+
 .activityIcon svg {
   width: 18px;
   height: 18px;

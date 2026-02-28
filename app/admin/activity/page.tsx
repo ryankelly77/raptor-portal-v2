@@ -216,6 +216,44 @@ export default function ActivityPage() {
             </svg>
           </div>
         );
+      case 'reminder_sent':
+      case 'email_sent':
+        return (
+          <div className={`${styles.activityIcon} ${styles.email}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="2">
+              <path d="M22 2L11 13" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+            </svg>
+          </div>
+        );
+      case 'email_delivered':
+        return (
+          <div className={`${styles.activityIcon} ${styles.emailDelivered}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2">
+              <path d="M22 2L11 13" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+            </svg>
+          </div>
+        );
+      case 'email_opened':
+        return (
+          <div className={`${styles.activityIcon} ${styles.emailOpened}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </div>
+        );
+      case 'email_clicked':
+        return (
+          <div className={`${styles.activityIcon} ${styles.emailClicked}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+              <path d="M15 3h6v6" />
+              <path d="M10 14L21 3" />
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            </svg>
+          </div>
+        );
       default:
         return (
           <div className={styles.activityIcon}>

@@ -117,6 +117,37 @@ export function ActivityLogPanel({ projectId }: ActivityLogPanelProps) {
             <polyline points="14 2 14 8 20 8" />
           </svg>
         );
+      case 'reminder_sent':
+      case 'email_sent':
+        return (
+          <svg viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="2" width="16" height="16">
+            <path d="M22 2L11 13" />
+            <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+          </svg>
+        );
+      case 'email_delivered':
+        return (
+          <svg viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" width="16" height="16">
+            <path d="M22 2L11 13" />
+            <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+            <polyline points="16 8 20 12 16 16" style={{ transform: 'translate(2px, 4px) scale(0.5)' }} />
+          </svg>
+        );
+      case 'email_opened':
+        return (
+          <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" width="16" height="16">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        );
+      case 'email_clicked':
+        return (
+          <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" width="16" height="16">
+            <path d="M15 3h6v6" />
+            <path d="M10 14L21 3" />
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          </svg>
+        );
       default:
         return (
           <svg viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" width="16" height="16">
