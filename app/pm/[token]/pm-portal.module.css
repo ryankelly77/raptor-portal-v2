@@ -114,7 +114,7 @@
 }
 
 .pmSurveyBtn:hover {
-  background: #e04a00;
+  background: var(--raptor-orange-light);
 }
 
 .pmSidebarSendPhone {
