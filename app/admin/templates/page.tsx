@@ -6,129 +6,16 @@ import styles from './templates.module.css';
 
 interface EmailTemplate {
   id: string;
-  key: string;
   name: string;
-  subject: string;
-  body: string;
-  is_active: boolean;
+  trigger_description: string | null;
+  trigger_details: string | null;
+  recipients: string | null;
+  cc_emails: string | null;
+  subject_template: string | null;
+  body_template: string | null;
   created_at: string;
   updated_at: string;
 }
-
-// Default template configurations
-const TEMPLATE_CONFIGS = [
-  {
-    key: 'welcome',
-    name: 'Welcome Email',
-    subject: 'Welcome to {{property_name}}!',
-    body: `Hello {{pm_name}},
-
-Welcome to the Raptor Vending Installation Portal. Your portal is now ready to use.
-
-Property: {{property_name}}
-Location: {{location_name}}
-
-You can access your portal anytime at:
-{{portal_url}}
-
-Best regards,
-The Raptor Vending Team`,
-    variables: ['pm_name', 'property_name', 'location_name', 'portal_url'],
-  },
-  {
-    key: 'project_created',
-    name: 'Project Created',
-    subject: 'New Project: {{property_name}} - {{location_name}}',
-    body: `Hello {{pm_name}},
-
-A new installation project has been created for your property.
-
-Property: {{property_name}}
-Location: {{location_name}}
-Project #: {{project_number}}
-
-View your project status at:
-{{portal_url}}
-
-Best regards,
-The Raptor Vending Team`,
-    variables: ['pm_name', 'property_name', 'location_name', 'project_number', 'portal_url'],
-  },
-  {
-    key: 'phase_completed',
-    name: 'Phase Completed',
-    subject: '{{phase_name}} Complete - {{property_name}}',
-    body: `Hello {{pm_name}},
-
-Great news! The "{{phase_name}}" phase has been completed for your project.
-
-Property: {{property_name}}
-Location: {{location_name}}
-Completed Phase: {{phase_name}}
-Next Phase: {{next_phase_name}}
-
-View the full project status at:
-{{portal_url}}
-
-Best regards,
-The Raptor Vending Team`,
-    variables: ['pm_name', 'property_name', 'location_name', 'phase_name', 'next_phase_name', 'portal_url'],
-  },
-  {
-    key: 'project_completed',
-    name: 'Project Completed',
-    subject: 'Installation Complete - {{property_name}}',
-    body: `Hello {{pm_name}},
-
-Congratulations! Your installation project has been completed.
-
-Property: {{property_name}}
-Location: {{location_name}}
-Project #: {{project_number}}
-
-Thank you for choosing Raptor Vending. If you have any questions or need support, please don't hesitate to reach out.
-
-Best regards,
-The Raptor Vending Team`,
-    variables: ['pm_name', 'property_name', 'location_name', 'project_number'],
-  },
-  {
-    key: 'action_required',
-    name: 'Action Required',
-    subject: 'Action Required: {{task_name}} - {{property_name}}',
-    body: `Hello {{pm_name}},
-
-We need your input on a project task.
-
-Property: {{property_name}}
-Location: {{location_name}}
-Task: {{task_name}}
-
-Please visit your portal to complete this action:
-{{portal_url}}
-
-Best regards,
-The Raptor Vending Team`,
-    variables: ['pm_name', 'property_name', 'location_name', 'task_name', 'portal_url'],
-  },
-  {
-    key: 'reminder',
-    name: 'Reminder',
-    subject: 'Reminder: {{subject_line}}',
-    body: `Hello {{pm_name}},
-
-This is a friendly reminder regarding your installation project.
-
-{{reminder_message}}
-
-Property: {{property_name}}
-Location: {{location_name}}
-
-Best regards,
-The Raptor Vending Team`,
-    variables: ['pm_name', 'property_name', 'location_name', 'subject_line', 'reminder_message'],
-  },
-];
 
 // Get auth headers for API calls
 function getAuthHeaders(): HeadersInit {
@@ -143,10 +30,27 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', subject: '', body: '', is_active: true });
+  const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    trigger_description: '',
+    trigger_details: '',
+    recipients: '',
+    cc_emails: '',
+    subject_template: '',
+    body_template: '',
+  });
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newForm, setNewForm] = useState({
+    name: '',
+    trigger_description: '',
+    trigger_details: '',
+    recipients: '',
+    cc_emails: '',
+    subject_template: '',
+    body_template: '',
+  });
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -157,6 +61,7 @@ export default function TemplatesPage() {
         body: JSON.stringify({ table: 'email_templates', action: 'read' }),
       });
       const result = await response.json();
+      console.log('Email templates from database:', result);
       setTemplates(result.data || []);
     } catch (err) {
       console.error('Error loading templates:', err);
@@ -169,40 +74,35 @@ export default function TemplatesPage() {
     loadTemplates();
   }, [loadTemplates]);
 
-  function getTemplate(key: string): EmailTemplate | null {
-    return templates.find((t) => t.key === key) || null;
-  }
-
-  function getConfig(key: string) {
-    return TEMPLATE_CONFIGS.find((c) => c.key === key);
-  }
-
-  async function handleCreate(config: (typeof TEMPLATE_CONFIGS)[0]) {
-    try {
-      await fetch('/api/admin/crud', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          table: 'email_templates',
-          action: 'create',
-          data: {
-            key: config.key,
-            name: config.name,
-            subject: config.subject,
-            body: config.body,
-            is_active: true,
-          },
-        }),
-      });
-      await loadTemplates();
-    } catch (err) {
-      alert('Error creating template: ' + (err instanceof Error ? err.message : 'Unknown'));
+  function handleExpand(templateId: string) {
+    if (expandedTemplate === templateId) {
+      setExpandedTemplate(null);
+      setEditingTemplate(null);
+    } else {
+      setExpandedTemplate(templateId);
+      setEditingTemplate(null);
     }
   }
 
-  async function handleSave(id: string) {
+  function handleEdit(template: EmailTemplate) {
+    setEditingTemplate(template.id);
+    setEditForm({
+      name: template.name || '',
+      trigger_description: template.trigger_description || '',
+      trigger_details: template.trigger_details || '',
+      recipients: template.recipients || '',
+      cc_emails: template.cc_emails || '',
+      subject_template: template.subject_template || '',
+      body_template: template.body_template || '',
+    });
+  }
+
+  function handleCancelEdit() {
+    setEditingTemplate(null);
+  }
+
+  async function handleSave(templateId: string) {
     setSaving(true);
-    setSaved(false);
     try {
       await fetch('/api/admin/crud', {
         method: 'POST',
@@ -210,18 +110,12 @@ export default function TemplatesPage() {
         body: JSON.stringify({
           table: 'email_templates',
           action: 'update',
-          id,
-          data: {
-            name: editForm.name,
-            subject: editForm.subject,
-            body: editForm.body,
-            is_active: editForm.is_active,
-          },
+          id: templateId,
+          data: editForm,
         }),
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
       await loadTemplates();
+      setEditingTemplate(null);
     } catch (err) {
       alert('Error saving template: ' + (err instanceof Error ? err.message : 'Unknown'));
     } finally {
@@ -229,107 +123,57 @@ export default function TemplatesPage() {
     }
   }
 
-  async function handleToggleActive(template: EmailTemplate) {
-    try {
-      await fetch('/api/admin/crud', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          table: 'email_templates',
-          action: 'update',
-          id: template.id,
-          data: { is_active: !template.is_active },
-        }),
-      });
-      await loadTemplates();
-    } catch (err) {
-      alert('Error updating template: ' + (err instanceof Error ? err.message : 'Unknown'));
-    }
-  }
-
-  async function handleReset(key: string) {
-    const config = getConfig(key);
-    const template = getTemplate(key);
-    if (!config || !template) return;
-
-    if (!window.confirm('Reset this template to default? All customizations will be lost.')) return;
-
-    try {
-      await fetch('/api/admin/crud', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          table: 'email_templates',
-          action: 'update',
-          id: template.id,
-          data: {
-            name: config.name,
-            subject: config.subject,
-            body: config.body,
-          },
-        }),
-      });
-      setEditForm({
-        name: config.name,
-        subject: config.subject,
-        body: config.body,
-        is_active: template.is_active,
-      });
-      await loadTemplates();
-    } catch (err) {
-      alert('Error resetting template: ' + (err instanceof Error ? err.message : 'Unknown'));
-    }
-  }
-
-  function expandTemplate(key: string) {
-    const template = getTemplate(key);
-    const config = getConfig(key);
-
-    if (expandedTemplate === key) {
-      setExpandedTemplate(null);
+  async function handleCreate() {
+    if (!newForm.name.trim()) {
+      alert('Template name is required');
       return;
     }
-
-    setExpandedTemplate(key);
-    setShowPreview(false);
-
-    if (template) {
-      setEditForm({
-        name: template.name,
-        subject: template.subject,
-        body: template.body,
-        is_active: template.is_active,
+    setSaving(true);
+    try {
+      await fetch('/api/admin/crud', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          table: 'email_templates',
+          action: 'create',
+          data: newForm,
+        }),
       });
-    } else if (config) {
-      setEditForm({
-        name: config.name,
-        subject: config.subject,
-        body: config.body,
-        is_active: true,
+      await loadTemplates();
+      setShowCreateForm(false);
+      setNewForm({
+        name: '',
+        trigger_description: '',
+        trigger_details: '',
+        recipients: '',
+        cc_emails: '',
+        subject_template: '',
+        body_template: '',
       });
+    } catch (err) {
+      alert('Error creating template: ' + (err instanceof Error ? err.message : 'Unknown'));
+    } finally {
+      setSaving(false);
     }
   }
 
-  function insertVariable(variable: string) {
-    setEditForm({ ...editForm, body: editForm.body + `{{${variable}}}` });
-  }
-
-  function getPreviewText(text: string) {
-    // Replace variables with sample values
-    const sampleValues: Record<string, string> = {
-      pm_name: 'John Smith',
-      property_name: 'Sunrise Apartments',
-      location_name: 'Building A - Lobby',
-      project_number: 'PRJ-2024-001',
-      portal_url: 'https://portal.raptorvendingusa.com/pm/abc123',
-      phase_name: 'Equipment Installation',
-      next_phase_name: 'Testing & Calibration',
-      task_name: 'Approve Equipment Specs',
-      subject_line: 'Upcoming Installation',
-      reminder_message: 'Please remember to clear the installation area before our team arrives.',
-    };
-
-    return text.replace(/\{\{(\w+)\}\}/g, (_, key) => sampleValues[key] || `{{${key}}}`);
+  async function handleDelete(templateId: string) {
+    if (!window.confirm('Delete this template? This cannot be undone.')) return;
+    try {
+      await fetch('/api/admin/crud', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          table: 'email_templates',
+          action: 'delete',
+          id: templateId,
+        }),
+      });
+      await loadTemplates();
+      setExpandedTemplate(null);
+    } catch (err) {
+      alert('Error deleting template: ' + (err instanceof Error ? err.message : 'Unknown'));
+    }
   }
 
   if (loading) {
@@ -349,135 +193,248 @@ export default function TemplatesPage() {
       <div className={styles.templatesPage}>
         <div className={styles.pageHeader}>
           <p className={styles.pageDescription}>
-            Customize automated email notifications sent to property managers
+            These email templates are sent automatically based on their triggers. Click a template to view or edit.
           </p>
-      </div>
+          <button className={styles.btnPrimary} onClick={() => setShowCreateForm(true)}>
+            + Create Template
+          </button>
+        </div>
 
-      <div className={styles.templatesList}>
-        {TEMPLATE_CONFIGS.map((config) => {
-          const template = getTemplate(config.key);
-          const isExpanded = expandedTemplate === config.key;
-
-          return (
-            <div key={config.key} className={styles.templateCard}>
-              <div className={styles.templateHeader} onClick={() => expandTemplate(config.key)}>
-                <span className={`${styles.expandIcon} ${isExpanded ? styles.expanded : ''}`}>▶</span>
-                <div className={styles.templateInfo}>
-                  <span className={styles.templateKey}>{config.key}</span>
-                  <h3 className={styles.templateName}>{template?.name || config.name}</h3>
-                </div>
-                <div className={styles.templateMeta}>
-                  <span className={`${styles.statusBadge} ${template?.is_active !== false ? styles.active : styles.inactive}`}>
-                    {template?.is_active !== false ? 'Active' : 'Inactive'}
-                  </span>
-                  {!template && <span style={{ color: '#9ca3af', fontSize: '12px' }}>Not initialized</span>}
-                </div>
+        {/* Create New Template Form */}
+        {showCreateForm && (
+          <div className={styles.createForm}>
+            <h3>Create New Template</h3>
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Template Name *</label>
+                <input
+                  className={styles.formInput}
+                  value={newForm.name}
+                  onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+                  placeholder="e.g., PM Invite Email"
+                />
               </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Trigger Description</label>
+                <input
+                  className={styles.formInput}
+                  value={newForm.trigger_description}
+                  onChange={(e) => setNewForm({ ...newForm, trigger_description: e.target.value })}
+                  placeholder="e.g., When PM is invited"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Trigger Details</label>
+                <input
+                  className={styles.formInput}
+                  value={newForm.trigger_details}
+                  onChange={(e) => setNewForm({ ...newForm, trigger_details: e.target.value })}
+                  placeholder="e.g., Sent when a new PM is added to the system"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Recipients</label>
+                <input
+                  className={styles.formInput}
+                  value={newForm.recipients}
+                  onChange={(e) => setNewForm({ ...newForm, recipients: e.target.value })}
+                  placeholder="e.g., Property Manager"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>CC Emails</label>
+                <input
+                  className={styles.formInput}
+                  value={newForm.cc_emails}
+                  onChange={(e) => setNewForm({ ...newForm, cc_emails: e.target.value })}
+                  placeholder="e.g., admin@example.com"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Subject Template</label>
+                <input
+                  className={styles.formInput}
+                  value={newForm.subject_template}
+                  onChange={(e) => setNewForm({ ...newForm, subject_template: e.target.value })}
+                  placeholder="e.g., Welcome to {{property_name}}"
+                />
+              </div>
+              <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                <label className={styles.formLabel}>Body Template</label>
+                <textarea
+                  className={styles.formTextarea}
+                  value={newForm.body_template}
+                  onChange={(e) => setNewForm({ ...newForm, body_template: e.target.value })}
+                  rows={6}
+                  placeholder="Email body with {{variables}}..."
+                />
+              </div>
+            </div>
+            <div className={styles.formActions}>
+              <button className={styles.btnPrimary} onClick={handleCreate} disabled={saving}>
+                {saving ? 'Creating...' : 'Create Template'}
+              </button>
+              <button className={styles.btnSecondary} onClick={() => setShowCreateForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
-              {isExpanded && (
-                <div className={styles.templateContent}>
-                  {!template ? (
-                    <div>
-                      <p style={{ color: '#6b7280', marginBottom: '16px' }}>
-                        This template hasn&apos;t been initialized yet. Click below to create it with default content.
-                      </p>
-                      <button className={styles.btnPrimary} onClick={() => handleCreate(config)}>
-                        Initialize Template
-                      </button>
+        {/* Templates List */}
+        {templates.length === 0 ? (
+          <div className={styles.emptyState}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="48" height="48">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+            <h3>No email templates found</h3>
+            <p>Create your first template to get started with automated emails.</p>
+          </div>
+        ) : (
+          <div className={styles.templatesList}>
+            {templates.map((template) => {
+              const isExpanded = expandedTemplate === template.id;
+              const isEditing = editingTemplate === template.id;
+
+              return (
+                <div key={template.id} className={styles.templateCard}>
+                  <div className={styles.templateHeader} onClick={() => handleExpand(template.id)}>
+                    <span className={`${styles.expandIcon} ${isExpanded ? styles.expanded : ''}`}>▶</span>
+                    <div className={styles.templateInfo}>
+                      <h3 className={styles.templateName}>{template.name}</h3>
+                      {template.trigger_description && (
+                        <span className={styles.triggerBadge}>{template.trigger_description}</span>
+                      )}
                     </div>
-                  ) : (
-                    <div className={styles.editorForm}>
-                      <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Template Name</label>
-                        <input
-                          className={styles.formInput}
-                          value={editForm.name}
-                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                        />
-                      </div>
+                    <div className={styles.templateMeta}>
+                      {template.subject_template && (
+                        <span className={styles.subjectPreview}>
+                          Subject: {template.subject_template.substring(0, 40)}
+                          {template.subject_template.length > 40 ? '...' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                      <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Subject Line</label>
-                        <input
-                          className={styles.formInput}
-                          value={editForm.subject}
-                          onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })}
-                        />
-                      </div>
-
-                      <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Email Body</label>
-                        <textarea
-                          className={styles.formTextarea}
-                          value={editForm.body}
-                          onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
-                          rows={10}
-                        />
-                      </div>
-
-                      <div className={styles.variablesSection}>
-                        <h4 className={styles.variablesTitle}>Available Variables (click to insert)</h4>
-                        <div className={styles.variablesList}>
-                          {config.variables.map((variable) => (
-                            <button
-                              key={variable}
-                              className={styles.variableTag}
-                              onClick={() => insertVariable(variable)}
-                            >
-                              {`{{${variable}}}`}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className={styles.previewSection}>
-                        <div className={styles.previewTitle}>
-                          <span>Preview</span>
-                          <button className={styles.previewToggle} onClick={() => setShowPreview(!showPreview)}>
-                            {showPreview ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                        {showPreview && (
-                          <div className={styles.previewBox}>
-                            <p className={styles.previewSubject}>Subject: {getPreviewText(editForm.subject)}</p>
-                            <div className={styles.previewBody}>{getPreviewText(editForm.body)}</div>
+                  {isExpanded && (
+                    <div className={styles.templateContent}>
+                      {isEditing ? (
+                        <div className={styles.editorForm}>
+                          <div className={styles.formGrid}>
+                            <div className={styles.formGroup}>
+                              <label className={styles.formLabel}>Template Name</label>
+                              <input
+                                className={styles.formInput}
+                                value={editForm.name}
+                                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              />
+                            </div>
+                            <div className={styles.formGroup}>
+                              <label className={styles.formLabel}>Trigger Description</label>
+                              <input
+                                className={styles.formInput}
+                                value={editForm.trigger_description}
+                                onChange={(e) => setEditForm({ ...editForm, trigger_description: e.target.value })}
+                              />
+                            </div>
+                            <div className={styles.formGroup}>
+                              <label className={styles.formLabel}>Trigger Details</label>
+                              <input
+                                className={styles.formInput}
+                                value={editForm.trigger_details}
+                                onChange={(e) => setEditForm({ ...editForm, trigger_details: e.target.value })}
+                              />
+                            </div>
+                            <div className={styles.formGroup}>
+                              <label className={styles.formLabel}>Recipients</label>
+                              <input
+                                className={styles.formInput}
+                                value={editForm.recipients}
+                                onChange={(e) => setEditForm({ ...editForm, recipients: e.target.value })}
+                              />
+                            </div>
+                            <div className={styles.formGroup}>
+                              <label className={styles.formLabel}>CC Emails</label>
+                              <input
+                                className={styles.formInput}
+                                value={editForm.cc_emails}
+                                onChange={(e) => setEditForm({ ...editForm, cc_emails: e.target.value })}
+                              />
+                            </div>
+                            <div className={styles.formGroup}>
+                              <label className={styles.formLabel}>Subject Template</label>
+                              <input
+                                className={styles.formInput}
+                                value={editForm.subject_template}
+                                onChange={(e) => setEditForm({ ...editForm, subject_template: e.target.value })}
+                              />
+                            </div>
+                            <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                              <label className={styles.formLabel}>Body Template</label>
+                              <textarea
+                                className={styles.formTextarea}
+                                value={editForm.body_template}
+                                onChange={(e) => setEditForm({ ...editForm, body_template: e.target.value })}
+                                rows={10}
+                              />
+                            </div>
                           </div>
-                        )}
-                      </div>
-
-                      <label className={styles.checkbox}>
-                        <input
-                          type="checkbox"
-                          checked={editForm.is_active}
-                          onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
-                        />
-                        Template is active
-                      </label>
-
-                      <div className={styles.formActions}>
-                        <button
-                          className={styles.btnPrimary}
-                          onClick={() => handleSave(template.id)}
-                          disabled={saving}
-                        >
-                          {saving ? 'Saving...' : saved ? '✓ Saved' : 'Save Changes'}
-                        </button>
-                        <button className={styles.btnSecondary} onClick={() => handleReset(config.key)}>
-                          Reset to Default
-                        </button>
-                        <button className={styles.btnDanger} onClick={() => handleToggleActive(template)}>
-                          {template.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </div>
+                          <div className={styles.formActions}>
+                            <button
+                              className={styles.btnPrimary}
+                              onClick={() => handleSave(template.id)}
+                              disabled={saving}
+                            >
+                              {saving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                            <button className={styles.btnSecondary} onClick={handleCancelEdit}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={styles.templateDetails}>
+                          <div className={styles.detailsGrid}>
+                            <div className={styles.detailItem}>
+                              <label>Trigger Details</label>
+                              <span>{template.trigger_details || '—'}</span>
+                            </div>
+                            <div className={styles.detailItem}>
+                              <label>Recipients</label>
+                              <span>{template.recipients || '—'}</span>
+                            </div>
+                            <div className={styles.detailItem}>
+                              <label>CC Emails</label>
+                              <span>{template.cc_emails || '—'}</span>
+                            </div>
+                            <div className={styles.detailItem}>
+                              <label>Subject</label>
+                              <span>{template.subject_template || '—'}</span>
+                            </div>
+                          </div>
+                          <div className={styles.bodySection}>
+                            <label>Email Body</label>
+                            <pre className={styles.bodyPreview}>{template.body_template || '(No body template)'}</pre>
+                          </div>
+                          <div className={styles.templateActions}>
+                            <button className={styles.btnSecondary} onClick={() => handleEdit(template)}>
+                              Edit Template
+                            </button>
+                            <button className={styles.btnDanger} onClick={() => handleDelete(template.id)}>
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
       </div>
-    </div>
     </AdminShell>
   );
 }
