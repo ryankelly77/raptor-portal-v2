@@ -187,6 +187,13 @@ export async function fetchProjectByToken(token: string): Promise<ProjectView | 
 
     if (tasksError) throw tasksError;
     tasks = tasksData || [];
+
+    // Debug: Log all task labels to see PM tasks
+    const pmTasks = tasks.filter(t => (t.label as string)?.startsWith('[PM]'));
+    if (pmTasks.length > 0) {
+      console.log('[SERVER DEBUG] PM Tasks found:', pmTasks.map(t => ({ id: t.id, label: t.label, phase_id: t.phase_id })));
+    }
+    console.log('[SERVER DEBUG] Total tasks fetched:', tasks.length, 'PM tasks:', pmTasks.length);
   }
 
   // Fetch equipment
