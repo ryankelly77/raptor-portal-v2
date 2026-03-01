@@ -134,10 +134,10 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
     requiredForCreate: ['project_id', 'name'],
     orderBy: { column: 'sort_order', ascending: true },
   },
-  activity_logs: {
+  activity_log: {
     allowedFields: [
       'project_id', 'phase_id', 'task_id', 'action', 'description',
-      'performed_by', 'metadata',
+      'performed_by', 'actor_type', 'metadata',
     ],
     requiredForCreate: ['action', 'description'],
     orderBy: { column: 'created_at', ascending: false },

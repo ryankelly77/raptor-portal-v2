@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAdminAuth } from '@/lib/contexts/AdminAuthContext';
 import styles from './admin.module.css';
 
-// Navigation items
+// Navigation items - renamed Projects to Installs
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
-  { href: '/admin/projects', label: 'Projects', icon: 'projects' },
+  { href: '/admin/projects', label: 'Installs', icon: 'projects' },
   { href: '/admin/property-managers', label: 'Property Managers', icon: 'users' },
   { href: '/admin/messages', label: 'Messages', icon: 'messages', badge: 0 },
   { href: '/admin/documents', label: 'Documents', icon: 'documents' },
@@ -18,6 +18,35 @@ const navItems = [
   { href: '/admin/temperature', label: 'Temp Logs', icon: 'temperature' },
   { href: '/admin/migrations', label: 'Migrations', icon: 'database' },
 ];
+
+interface Project {
+  id: string;
+  project_number: string | null;
+  location_id: string | null;
+  property_id: string;
+  overall_progress: number;
+  is_active: boolean;
+  public_token: string;
+  status: string;
+}
+
+interface Property {
+  id: string;
+  name: string;
+  property_manager_id: string | null;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  property_id: string;
+}
+
+interface PropertyManager {
+  id: string;
+  name: string;
+  company: string | null;
+}
 
 // Icons component
 function NavIcon({ name }: { name: string }) {
@@ -91,10 +120,69 @@ function NavIcon({ name }: { name: string }) {
   }
 }
 
+function getAuthHeaders(): HeadersInit {
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export default function AdminDashboard() {
   const { isAuthenticated, isLoading, logout } = useAdminAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Data
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [managers, setManagers] = useState<PropertyManager[]>([]);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [projectsRes, propertiesRes, locationsRes, managersRes] = await Promise.all([
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'projects', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'properties', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'locations', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'property_managers', action: 'read' }),
+        }),
+      ]);
+
+      const [projectsData, propertiesData, locationsData, managersData] = await Promise.all([
+        projectsRes.json(),
+        propertiesRes.json(),
+        locationsRes.json(),
+        managersRes.json(),
+      ]);
+
+      setProjects(projectsData.data || []);
+      setProperties(propertiesData.data || []);
+      setLocations(locationsData.data || []);
+      setManagers(managersData.data || []);
+    } catch (err) {
+      console.error('Error loading dashboard data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -103,10 +191,30 @@ export default function AdminDashboard() {
     }
   }, [isAuthenticated, isLoading, router]);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [isAuthenticated, loadData]);
+
   const handleLogout = () => {
     logout();
     router.replace('/admin/login');
   };
+
+  // Helper to get location/property info for a project
+  function getLocationInfo(project: Project) {
+    const location = locations.find((l) => l.id === project.location_id);
+    const property = location
+      ? properties.find((p) => p.id === location.property_id)
+      : properties.find((p) => p.id === project.property_id);
+    const pm = property ? managers.find((m) => m.id === property.property_manager_id) : null;
+    return { location, property, pm };
+  }
+
+  // Calculate stats
+  const activeProjects = projects.filter((p) => p.is_active).length;
+  const completedProjects = projects.filter((p) => p.overall_progress === 100).length;
 
   // Show loading while checking auth
   if (isLoading) {
@@ -190,28 +298,79 @@ export default function AdminDashboard() {
 
         {/* Page Content */}
         <div className={styles.pageContent}>
+          {/* Stats Grid */}
           <div className={styles.dashboardGrid}>
             <div className={styles.statCard}>
-              <p className={styles.statLabel}>Active Projects</p>
-              <p className={styles.statValue}>--</p>
+              <p className={styles.statLabel}>Active Installs</p>
+              <p className={styles.statValue}>{loading ? '--' : activeProjects}</p>
             </div>
             <div className={styles.statCard}>
-              <p className={styles.statLabel}>Pending Tasks</p>
-              <p className={styles.statValue}>--</p>
+              <p className={styles.statLabel}>Completed</p>
+              <p className={styles.statValue}>{loading ? '--' : completedProjects}</p>
             </div>
             <div className={styles.statCard}>
-              <p className={styles.statLabel}>Survey Responses</p>
-              <p className={styles.statValue}>--</p>
+              <p className={styles.statLabel}>Properties</p>
+              <p className={styles.statValue}>{loading ? '--' : properties.length}</p>
             </div>
             <div className={styles.statCard}>
-              <p className={styles.statLabel}>Unread Messages</p>
-              <p className={styles.statValue}>--</p>
+              <p className={styles.statLabel}>Property Managers</p>
+              <p className={styles.statValue}>{loading ? '--' : managers.length}</p>
             </div>
           </div>
 
-          <p style={{ color: '#6b7280', textAlign: 'center', marginTop: '48px' }}>
-            Dashboard content coming soon. Use the sidebar to navigate to different sections.
-          </p>
+          {/* Installs Section */}
+          <div className={styles.sectionHeader}>
+            <h2>Installs</h2>
+            <Link href="/admin/projects" className={styles.btnPrimary}>
+              + New Install
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className={styles.loadingContainer}>
+              <div className={styles.loadingSpinner} />
+            </div>
+          ) : projects.length === 0 ? (
+            <div className={styles.emptyState}>
+              <p>No installs yet. Create your first install to get started.</p>
+            </div>
+          ) : (
+            <div className={styles.projectsGrid}>
+              {projects.map((project) => {
+                const { location, property } = getLocationInfo(project);
+                return (
+                  <Link
+                    key={project.id}
+                    href={`/admin/projects/${project.id}`}
+                    className={styles.projectCard}
+                  >
+                    <div className={styles.projectCardHeader}>
+                      <span className={styles.projectNumber}>{project.project_number || 'No #'}</span>
+                      <span className={`${styles.statusBadge} ${project.is_active ? styles.active : styles.inactive}`}>
+                        {project.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className={styles.projectCardBody}>
+                      <h3>{property?.name || 'Unknown Property'}</h3>
+                      <p>{location?.name || 'Unknown Location'}</p>
+                      <div className={styles.projectProgress}>
+                        <div className={styles.progressBarMini}>
+                          <div
+                            className={styles.progressFill}
+                            style={{ width: `${project.overall_progress ?? 0}%` }}
+                          />
+                        </div>
+                        <span>{project.overall_progress ?? 0}%</span>
+                      </div>
+                    </div>
+                    <div className={styles.projectCardFooter}>
+                      <span className={styles.tokenDisplay}>Token: {project.public_token}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
       </main>
     </div>

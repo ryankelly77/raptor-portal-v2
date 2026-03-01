@@ -88,7 +88,7 @@ export default function ActivityPage() {
         fetch('/api/admin/crud', {
           method: 'POST',
           headers: getAuthHeaders(),
-          body: JSON.stringify({ table: 'activity_logs', action: 'read' }),
+          body: JSON.stringify({ table: 'activity_log', action: 'read' }),
         }),
       ]);
 
