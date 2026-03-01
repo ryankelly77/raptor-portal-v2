@@ -2,6 +2,9 @@ import { fetchProjectsByPMToken } from '@/lib/data/projects';
 import { PMPortalContent } from './components/PMPortalContent';
 import styles from './pm-portal.module.css';
 
+// Disable caching - always fetch fresh data
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   params: Promise<{
     token: string;

@@ -3,6 +3,9 @@ import { fetchProjectByToken } from '@/lib/data/projects';
 import { ProjectContent } from './components/ProjectContent';
 import styles from './project.module.css';
 
+// Disable caching - always fetch fresh data
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   params: Promise<{ token: string }>;
 }
