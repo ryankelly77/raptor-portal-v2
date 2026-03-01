@@ -137,7 +137,7 @@
 }
 
 .cardHeader {
-  padding: 16px 16px 12px;
+  padding: 16px 50px 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
