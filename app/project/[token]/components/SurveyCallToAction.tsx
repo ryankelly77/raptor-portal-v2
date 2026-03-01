@@ -122,11 +122,14 @@ export function SurveyCallToAction({
     return `Click here once ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
   };
 
+  // Visible debug - shows task counts on page
+  const debugInfo = typeof window !== 'undefined' ? `[Tasks: ${allPmTasks.length} PM, ${pmTextTasks.length} Text]` : '';
+
   return (
     <div className={styles.surveyCta}>
       <div className={styles.noticeHeader}>
         <ClipboardIcon />
-        <span>Property Manager Action Items</span>
+        <span>Property Manager Action Items {debugInfo && <small style={{ color: '#999', fontWeight: 'normal' }}>{debugInfo}</small>}</span>
       </div>
       <div className={styles.surveyCtaContent}>
         <p>Copy this link and share with building tenants to capture their snack and meal preferences:</p>

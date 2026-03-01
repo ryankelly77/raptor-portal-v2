@@ -91,12 +91,16 @@ export function TimelinePhase({
   const isEquipmentPhase = phase.title.toLowerCase().includes('equipment');
   const hasPmTasks = phase.tasks.some(t => t.label.startsWith('[PM]') || t.label.startsWith('[PM-TEXT]'));
 
+  // Count PM tasks for debugging
+  const pmTaskCount = phase.tasks.filter(t => t.label.startsWith('[PM]') && !t.label.startsWith('[PM-TEXT]')).length;
+  const pmTextTaskCount = phase.tasks.filter(t => t.label.startsWith('[PM-TEXT]')).length;
+  const regularTaskCount = phase.tasks.filter(t => !t.label.startsWith('[PM]') && !t.label.startsWith('[PM-TEXT]')).length;
+
   // Debug logging for all tasks
   if (typeof window !== 'undefined') {
-    console.log(`[DEBUG] Phase "${phase.title}" has ${phase.tasks.length} tasks:`, phase.tasks.map(t => t.label));
-    const pmTasksInPhase = phase.tasks.filter(t => t.label.startsWith('[PM]'));
-    if (pmTasksInPhase.length > 0) {
-      console.log(`[DEBUG] PM tasks in phase:`, pmTasksInPhase.map(t => t.label));
+    console.log(`[DEBUG] Phase "${phase.title}": ${phase.tasks.length} total, ${pmTaskCount} PM, ${pmTextTaskCount} PM-TEXT, ${regularTaskCount} regular`);
+    if (pmTaskCount > 0) {
+      console.log(`[DEBUG] PM tasks:`, phase.tasks.filter(t => t.label.startsWith('[PM]')).map(t => t.label));
     }
   }
 
@@ -232,6 +236,22 @@ export function TimelinePhase({
             </div>
           )}
 
+          {/* DEBUG: Show all task labels in survey phase */}
+          {isSurveyPhase && (
+            <div style={{ background: '#ffe0e0', padding: '10px', marginBottom: '10px', fontSize: '12px', fontFamily: 'monospace' }}>
+              <strong>DEBUG - All tasks in this phase ({phase.tasks.length}):</strong>
+              <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
+                {phase.tasks.map((t, i) => (
+                  <li key={i}>
+                    {t.label.startsWith('[PM]') ? '✓ PM: ' : ''}
+                    {t.label.startsWith('[PM-TEXT]') ? '✓ PM-TEXT: ' : ''}
+                    {t.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Survey CTA */}
           {isSurveyPhase && (
             <SurveyCallToAction
@@ -294,6 +314,18 @@ export function TimelinePhase({
               />
             )}
 
+          {/* DEBUG: Show PM task status for non-survey phases */}
+          {!isSurveyPhase && hasPmTasks && (
+            <div style={{ background: '#e0ffe0', padding: '10px', marginBottom: '10px', fontSize: '12px', fontFamily: 'monospace' }}>
+              <strong>DEBUG - PM tasks found in &quot;{phase.title}&quot;:</strong>
+              <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
+                {phase.tasks.filter(t => t.label.startsWith('[PM]') || t.label.startsWith('[PM-TEXT]')).map((t, i) => (
+                  <li key={i}>{t.label}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Survey Results */}
           {phase.surveyResults && <SurveyResults results={phase.surveyResults} />}
 
@@ -305,6 +337,10 @@ export function TimelinePhase({
                 : phase.status === 'in-progress'
                 ? 'Task Progress'
                 : 'Upcoming Tasks'}
+              {/* Debug: show task breakdown */}
+              <small style={{ color: '#999', fontWeight: 'normal', marginLeft: '8px' }}>
+                ({regularTaskCount} tasks{pmTaskCount > 0 ? `, ${pmTaskCount} PM` : ''}{pmTextTaskCount > 0 ? `, ${pmTextTaskCount} text` : ''})
+              </small>
             </div>
             {phase.tasks.map((task) => (
               <TaskItem
