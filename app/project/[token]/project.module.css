@@ -1382,6 +1382,11 @@
   border-color: var(--raptor-orange);
 }
 
+/* Add spacing between survey URL and PM action items */
+.surveyCta .pmActionItems {
+  margin-top: 20px;
+}
+
 .copyBtn {
   padding: 10px 14px;
   background: var(--raptor-orange);
