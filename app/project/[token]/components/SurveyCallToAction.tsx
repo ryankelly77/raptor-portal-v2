@@ -65,12 +65,6 @@ export function SurveyCallToAction({
   // Use pmTasks if provided, otherwise fall back to single pmTask for backwards compatibility
   const allPmTasks = pmTasks.length > 0 ? pmTasks : (pmTask ? [pmTask] : []);
 
-  // Debug logging
-  if (typeof window !== 'undefined') {
-    console.log('[DEBUG] SurveyCallToAction received pmTasks:', pmTasks.length, pmTasks.map(t => t.label));
-    console.log('[DEBUG] SurveyCallToAction allPmTasks:', allPmTasks.length, allPmTasks.map(t => t.label));
-  }
-
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const surveyUrl = surveyToken
     ? `${baseUrl}/survey/${surveyToken}`
@@ -122,14 +116,11 @@ export function SurveyCallToAction({
     return `Click here once ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
   };
 
-  // Visible debug - shows task counts on page
-  const debugInfo = typeof window !== 'undefined' ? `[Tasks: ${allPmTasks.length} PM, ${pmTextTasks.length} Text]` : '';
-
   return (
     <div className={styles.surveyCta}>
       <div className={styles.noticeHeader}>
         <ClipboardIcon />
-        <span>Property Manager Action Items {debugInfo && <small style={{ color: '#999', fontWeight: 'normal' }}>{debugInfo}</small>}</span>
+        <span>Property Manager Action Items</span>
       </div>
       <div className={styles.surveyCtaContent}>
         <p>Copy this link and share with building tenants to capture their snack and meal preferences:</p>
@@ -152,78 +143,80 @@ export function SurveyCallToAction({
         </div>
 
         {/* PM Action Items */}
-        {allPmTasks.map((task) => (
-          <div
-            key={task.id}
-            className={`${styles.pmActionItem} ${task.completed ? styles.pmActionItemCompleted : ''}`}
-            onClick={() => handleTaskToggle(task)}
-          >
-            <div className={`${styles.pmCheckbox} ${task.completed ? styles.pmCheckboxChecked : ''}`}>
-              {task.completed && <SmallCheckIcon />}
-            </div>
-            <span className={styles.pmActionLabel}>
-              {task.completed ? getTaskLabel(task.label) : getPromptForTask(task)}
-            </span>
-          </div>
-        ))}
-
-        {/* PM-TEXT Action Items (like banner permission) */}
-        {pmTextTasks.map((task) => {
-          const displayLabel = task.label.replace('[PM-TEXT] ', '');
-          const isBannerTask = task.label.toLowerCase().includes('banner');
-          const canSubmit = textValues[task.id]?.trim();
-
-          const handleTextComplete = async () => {
-            if (readOnly || updating || task.completed || !canSubmit) return;
-            setUpdating(task.id);
-            try {
-              await updateTask(task.id, { completed: true, pm_text_response: textValues[task.id].trim() });
-              onTaskUpdate();
-            } catch (err) {
-              console.error('Error updating task:', err);
-            } finally {
-              setUpdating(null);
-            }
-          };
-
-          return (
+        <div className={styles.pmActionItems}>
+          {allPmTasks.map((task) => (
             <div
               key={task.id}
-              className={`${styles.pmActionItem} ${styles.pmTextTask} ${task.completed ? styles.pmActionItemCompleted : ''}`}
+              className={`${styles.pmActionItem} ${task.completed ? styles.pmActionItemCompleted : ''}`}
+              onClick={() => handleTaskToggle(task)}
             >
-              <div
-                className={`${styles.pmCheckbox} ${task.completed ? styles.pmCheckboxChecked : ''}`}
-                onClick={handleTextComplete}
-                style={{ cursor: canSubmit && !task.completed ? 'pointer' : 'default' }}
-              >
+              <div className={`${styles.pmCheckbox} ${task.completed ? styles.pmCheckboxChecked : ''}`}>
                 {task.completed && <SmallCheckIcon />}
               </div>
-              <div className={styles.pmTextTaskContent}>
-                <span className={styles.pmActionLabel}>{displayLabel}</span>
-                {!task.completed ? (
-                  <div className={styles.pmTextInputWrapper}>
-                    <input
-                      type="text"
-                      className={styles.pmTextInlineInput}
-                      placeholder={isBannerTask ? 'Yes / No / Lobby only...' : 'Enter response'}
-                      value={textValues[task.id] || ''}
-                      onChange={(e) => setTextValues({ ...textValues, [task.id]: e.target.value })}
-                      disabled={readOnly}
-                    />
-                    {isBannerTask && (
-                      <WhatsThisLink
-                        text='Raptor Vending uses retractable banners (33" x 81") to announce the upcoming food program to employees before machines arrive. This builds awareness and excitement. Please confirm if banner placement is allowed on-site (e.g. "Yes" or "No - lobby only").'
-                        imageUrl="/banner-example.jpg"
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className={styles.pmTextValue}>{task.pm_text_response}</div>
-                )}
-              </div>
+              <span className={styles.pmActionLabel}>
+                {task.completed ? getTaskLabel(task.label) : getPromptForTask(task)}
+              </span>
             </div>
-          );
-        })}
+          ))}
+
+          {/* PM-TEXT Action Items (like banner permission) */}
+          {pmTextTasks.map((task) => {
+            const displayLabel = task.label.replace('[PM-TEXT] ', '');
+            const isBannerTask = task.label.toLowerCase().includes('banner');
+            const canSubmit = textValues[task.id]?.trim();
+
+            const handleTextComplete = async () => {
+              if (readOnly || updating || task.completed || !canSubmit) return;
+              setUpdating(task.id);
+              try {
+                await updateTask(task.id, { completed: true, pm_text_response: textValues[task.id].trim() });
+                onTaskUpdate();
+              } catch (err) {
+                console.error('Error updating task:', err);
+              } finally {
+                setUpdating(null);
+              }
+            };
+
+            return (
+              <div
+                key={task.id}
+                className={`${styles.pmActionItem} ${styles.pmTextTask} ${task.completed ? styles.pmActionItemCompleted : ''}`}
+              >
+                <div
+                  className={`${styles.pmCheckbox} ${task.completed ? styles.pmCheckboxChecked : ''}`}
+                  onClick={handleTextComplete}
+                  style={{ cursor: canSubmit && !task.completed ? 'pointer' : 'default' }}
+                >
+                  {task.completed && <SmallCheckIcon />}
+                </div>
+                <div className={styles.pmTextTaskContent}>
+                  <span className={styles.pmActionLabel}>{displayLabel}</span>
+                  {!task.completed ? (
+                    <div className={styles.pmTextInputWrapper}>
+                      <input
+                        type="text"
+                        className={styles.pmTextInlineInput}
+                        placeholder={isBannerTask ? 'Yes / No / Lobby only...' : 'Enter response'}
+                        value={textValues[task.id] || ''}
+                        onChange={(e) => setTextValues({ ...textValues, [task.id]: e.target.value })}
+                        disabled={readOnly}
+                      />
+                      {isBannerTask && (
+                        <WhatsThisLink
+                          text='Raptor Vending uses retractable banners (33" x 81") to announce the upcoming food program to employees before machines arrive. This builds awareness and excitement. Please confirm if banner placement is allowed on-site (e.g. "Yes" or "No - lobby only").'
+                          imageUrl="/banner-example.jpg"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div className={styles.pmTextValue}>{task.pm_text_response}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
         {(surveyClicks > 0 || surveyCompletions > 0) && (
           <div className={styles.surveyStats}>

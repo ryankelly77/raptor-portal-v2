@@ -200,7 +200,7 @@ export function BuildingAccessNotice({
     <div className={styles.buildingAccessNotice}>
       <div className={styles.noticeHeader}>
         <ClipboardIcon />
-        <span>Property Manager Action Items <small style={{ color: '#999', fontWeight: 'normal' }}>({pmTasks.length} items)</small></span>
+        <span>Property Manager Action Items</span>
       </div>
       <p>{subtitle}</p>
 
