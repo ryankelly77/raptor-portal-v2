@@ -91,6 +91,15 @@ export function TimelinePhase({
   const isEquipmentPhase = phase.title.toLowerCase().includes('equipment');
   const hasPmTasks = phase.tasks.some(t => t.label.startsWith('[PM]') || t.label.startsWith('[PM-TEXT]'));
 
+  // Debug logging for PM tasks
+  if (typeof window !== 'undefined') {
+    const pmTasksInPhase = phase.tasks.filter(t => t.label.startsWith('[PM]'));
+    if (pmTasksInPhase.length > 0) {
+      console.log(`[DEBUG] Phase "${phase.title}" has PM tasks:`, pmTasksInPhase.map(t => t.label));
+      console.log(`[DEBUG] isSurveyPhase: ${isSurveyPhase}, isBuildingAccessPhase: ${isBuildingAccessPhase}, isEquipmentPhase: ${isEquipmentPhase}`);
+    }
+  }
+
   const showReadOnlyMessage = () => {
     alert('Only Property Managers or Raptor Vending can access these documents.');
   };

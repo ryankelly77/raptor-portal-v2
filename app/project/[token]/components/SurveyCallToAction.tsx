@@ -65,6 +65,12 @@ export function SurveyCallToAction({
   // Use pmTasks if provided, otherwise fall back to single pmTask for backwards compatibility
   const allPmTasks = pmTasks.length > 0 ? pmTasks : (pmTask ? [pmTask] : []);
 
+  // Debug logging
+  if (typeof window !== 'undefined') {
+    console.log('[DEBUG] SurveyCallToAction received pmTasks:', pmTasks.length, pmTasks.map(t => t.label));
+    console.log('[DEBUG] SurveyCallToAction allPmTasks:', allPmTasks.length, allPmTasks.map(t => t.label));
+  }
+
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const surveyUrl = surveyToken
     ? `${baseUrl}/survey/${surveyToken}`
