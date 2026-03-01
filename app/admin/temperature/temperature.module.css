@@ -257,7 +257,7 @@
 
 .statusBadge.completed {
   background-color: #dbeafe;
-  color: #2563eb;
+  color: #FF580F;
 }
 
 /* Action Buttons */
@@ -389,7 +389,7 @@
 
 .entryType.stop {
   background-color: #dbeafe;
-  color: #2563eb;
+  color: #FF580F;
 }
 
 .entryType.end {
