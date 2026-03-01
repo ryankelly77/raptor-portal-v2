@@ -22,6 +22,12 @@
   margin: 0;
 }
 
+.unreadIndicator {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f97316;
+}
+
 .headerActions {
   display: flex;
   align-items: center;

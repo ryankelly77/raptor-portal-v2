@@ -337,7 +337,7 @@ export default function AdminDashboard() {
           ) : (
             <div className={styles.projectsGrid}>
               {projects.map((project) => {
-                const { location, property } = getLocationInfo(project);
+                const { location, property, pm } = getLocationInfo(project);
                 return (
                   <Link
                     key={project.id}
@@ -353,6 +353,7 @@ export default function AdminDashboard() {
                     <div className={styles.projectCardBody}>
                       <h3>{property?.name || 'Unknown Property'}</h3>
                       <p>{location?.name || 'Unknown Location'}</p>
+                      {pm && <p className={styles.projectPM}>PM: {pm.name}</p>}
                       <div className={styles.projectProgress}>
                         <div className={styles.progressBarMini}>
                           <div

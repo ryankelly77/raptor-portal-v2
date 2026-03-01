@@ -348,12 +348,9 @@ export default function TemplatesPage() {
     <AdminShell title="Email Templates">
       <div className={styles.templatesPage}>
         <div className={styles.pageHeader}>
-          <div>
-            <h1 className={styles.pageTitle}>Email Templates</h1>
           <p className={styles.pageDescription}>
             Customize automated email notifications sent to property managers
           </p>
-        </div>
       </div>
 
       <div className={styles.templatesList}>

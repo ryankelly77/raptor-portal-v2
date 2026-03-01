@@ -467,6 +467,13 @@
   margin: 0;
 }
 
+.projectPM {
+  font-size: 13px;
+  color: #f97316;
+  margin: 4px 0 0;
+  font-weight: 500;
+}
+
 .projectProgress {
   display: flex;
   align-items: center;

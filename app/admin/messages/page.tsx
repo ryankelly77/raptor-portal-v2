@@ -214,10 +214,7 @@ export default function MessagesPage() {
     <AdminShell title="Messages">
       <div className={styles.messagesPage}>
         <div className={styles.pageHeader}>
-          <h1 className={styles.pageTitle}>
-            Messages
-            {totalUnread > 0 && <span style={{ color: '#f97316', marginLeft: '8px' }}>({totalUnread} unread)</span>}
-          </h1>
+          {totalUnread > 0 && <span className={styles.unreadIndicator}>({totalUnread} unread)</span>}
           <div className={styles.headerActions}>
             <select
               className={styles.newConvoSelect}

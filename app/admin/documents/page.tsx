@@ -216,12 +216,9 @@ export default function DocumentsPage() {
     <AdminShell title="Documents">
       <div className={styles.documentsPage}>
         <div className={styles.pageHeader}>
-          <div>
-            <h1 className={styles.pageTitle}>Global Documents</h1>
           <p className={styles.pageDescription}>
             Manage documents that are available across all projects
           </p>
-        </div>
       </div>
 
       <div className={styles.documentsGrid}>

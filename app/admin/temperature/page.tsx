@@ -342,7 +342,6 @@ export default function TemperaturePage() {
     <AdminShell title="Temperature Logs">
       <div className={styles.temperaturePage}>
         <div className={styles.pageHeader}>
-          <h1 className={styles.pageTitle}>Temperature Logs</h1>
         <div className={styles.headerActions}>
           <button className={styles.refreshButton} onClick={loadData}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">

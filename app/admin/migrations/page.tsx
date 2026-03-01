@@ -219,12 +219,9 @@ export default function MigrationsPage() {
     <AdminShell title="Migrations">
       <div className={styles.migrationsPage}>
         <div className={styles.pageHeader}>
-          <div>
-            <h1 className={styles.pageTitle}>Database Migrations</h1>
           <p className={styles.pageDescription}>
             Manage database schema changes and run SQL queries
           </p>
-        </div>
         <div className={styles.headerActions}>
           <button className={styles.refreshButton} onClick={loadMigrations}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">

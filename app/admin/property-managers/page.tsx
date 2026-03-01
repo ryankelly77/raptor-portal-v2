@@ -365,7 +365,6 @@ export default function PropertyManagersPage() {
     <AdminShell title="Property Managers">
       <div className={styles.pmPage}>
         <div className={styles.pageHeader}>
-          <h1 className={styles.pageTitle}>Property Managers</h1>
         <div className={styles.headerActions}>
           <button className={styles.createButton} onClick={() => setShowAddPM(true)}>
             + Add Property Manager
@@ -485,7 +484,7 @@ export default function PropertyManagersPage() {
                     <button className={styles.btnEdit} onClick={() => startEditingPM(pm)}>
                       Edit
                     </button>
-                    <button className={styles.btnEdit} onClick={() => handleTogglePMActive(pm)}>
+                    <button className={styles.btnToggle} onClick={() => handleTogglePMActive(pm)}>
                       {pm.is_active ? 'Deactivate' : 'Activate'}
                     </button>
                     <button className={styles.btnDelete} onClick={() => handleDeletePM(pm.id)}>

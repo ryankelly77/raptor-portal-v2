@@ -302,7 +302,6 @@ export default function ActivityPage() {
     <AdminShell title="Activity Log">
       <div className={styles.activityPage}>
         <div className={styles.pageHeader}>
-          <h1 className={styles.pageTitle}>Activity Log</h1>
         <div className={styles.headerActions}>
           <button className={styles.refreshButton} onClick={loadData}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
