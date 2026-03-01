@@ -189,7 +189,9 @@ export function BuildingAccessNotice({
   };
 
   const getPromptForTask = (task: TaskData) => {
-    return `Click here once ${getTaskLabel(task.label).toLowerCase()}`;
+    const label = getTaskLabel(task.label);
+    // Lowercase only the first character to flow naturally after "Click here once"
+    return `Click here once ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
   };
 
   if (pmTasks.length === 0) return null;
