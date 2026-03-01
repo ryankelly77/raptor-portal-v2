@@ -349,15 +349,15 @@ export default function ProjectsListPage() {
                       {project.propertyManager && (
                         <p className={styles.pmName}>PM: {project.propertyManager.name}</p>
                       )}
-                      {project.configuration && (
-                        <p className={styles.configText}>{project.configuration}</p>
-                      )}
                       <div className={styles.progressBar}>
                         <div className={styles.progressTrack}>
                           <div className={styles.progressFill} style={{ width: `${project.overall_progress || 0}%` }} />
                         </div>
                         <span className={styles.progressText}>{project.overall_progress || 0}%</span>
                       </div>
+                    </div>
+                    <div className={styles.cardFooter}>
+                      <span className={styles.tokenDisplay}>Token: {project.public_token}</span>
                     </div>
                   </div>
                 ))}

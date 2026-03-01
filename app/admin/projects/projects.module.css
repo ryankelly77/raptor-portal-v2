@@ -141,15 +141,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #f3f4f6;
 }
 
 .projectNumber {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #FF580F;
 }
 
 .statusBadge {
@@ -189,8 +186,9 @@
 
 .pmName {
   font-size: 13px;
-  color: #9ca3af;
-  margin: 0 0 12px;
+  color: #f97316;
+  font-weight: 500;
+  margin: 4px 0 12px;
 }
 
 .configText {
