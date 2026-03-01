@@ -11,6 +11,7 @@ interface SurveyCallToActionProps {
   surveyClicks?: number;
   surveyCompletions?: number;
   pmTask?: TaskData;
+  pmTasks?: TaskData[];  // All PM tasks (for displaying multiple)
   pmTextTasks?: TaskData[];
   onTaskUpdate: () => void;
   readOnly?: boolean;
@@ -52,13 +53,17 @@ export function SurveyCallToAction({
   surveyClicks = 0,
   surveyCompletions = 0,
   pmTask,
+  pmTasks = [],
   pmTextTasks = [],
   onTaskUpdate,
   readOnly = false,
 }: SurveyCallToActionProps) {
   const [copied, setCopied] = useState(false);
-  const [updating, setUpdating] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
   const [textValues, setTextValues] = useState<Record<string, string>>({});
+
+  // Use pmTasks if provided, otherwise fall back to single pmTask for backwards compatibility
+  const allPmTasks = pmTasks.length > 0 ? pmTasks : (pmTask ? [pmTask] : []);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const surveyUrl = surveyToken
@@ -80,21 +85,35 @@ export function SurveyCallToAction({
     alert('Only Property Managers or Raptor Vending can complete tasks.');
   };
 
-  const handleTaskToggle = async () => {
+  const handleTaskToggle = async (task: TaskData) => {
     if (readOnly) {
       showReadOnlyMessage();
       return;
     }
-    if (!pmTask || updating || pmTask.completed) return;
-    setUpdating(true);
+    if (!task || updating || task.completed) return;
+    setUpdating(task.id);
     try {
-      await updateTask(pmTask.id, { completed: true });
+      await updateTask(task.id, { completed: true });
       onTaskUpdate();
     } catch (err) {
       console.error('Error updating task:', err);
     } finally {
-      setUpdating(false);
+      setUpdating(null);
     }
+  };
+
+  const getTaskLabel = (label: string) => {
+    return label.replace('[PM] ', '').replace('[PM-TEXT] ', '');
+  };
+
+  const getPromptForTask = (task: TaskData) => {
+    const label = getTaskLabel(task.label);
+    // Special case for the default survey distribution task
+    if (label.toLowerCase().includes('survey') && label.toLowerCase().includes('tenant')) {
+      return "Click here once you've shared the survey with tenants";
+    }
+    // Lowercase only the first character to flow naturally after "Click here once"
+    return `Click here once ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
   };
 
   return (
@@ -123,22 +142,21 @@ export function SurveyCallToAction({
           </button>
         </div>
 
-        {/* PM Action Item */}
-        {pmTask && (
+        {/* PM Action Items */}
+        {allPmTasks.map((task) => (
           <div
-            className={`${styles.pmActionItem} ${pmTask.completed ? styles.pmActionItemCompleted : ''}`}
-            onClick={handleTaskToggle}
+            key={task.id}
+            className={`${styles.pmActionItem} ${task.completed ? styles.pmActionItemCompleted : ''}`}
+            onClick={() => handleTaskToggle(task)}
           >
-            <div className={`${styles.pmCheckbox} ${pmTask.completed ? styles.pmCheckboxChecked : ''}`}>
-              {pmTask.completed && <SmallCheckIcon />}
+            <div className={`${styles.pmCheckbox} ${task.completed ? styles.pmCheckboxChecked : ''}`}>
+              {task.completed && <SmallCheckIcon />}
             </div>
             <span className={styles.pmActionLabel}>
-              {pmTask.completed
-                ? 'Survey link distributed to tenants'
-                : "Click here once you've shared the survey with tenants"}
+              {task.completed ? getTaskLabel(task.label) : getPromptForTask(task)}
             </span>
           </div>
-        )}
+        ))}
 
         {/* PM-TEXT Action Items (like banner permission) */}
         {pmTextTasks.map((task) => {
@@ -148,14 +166,14 @@ export function SurveyCallToAction({
 
           const handleTextComplete = async () => {
             if (readOnly || updating || task.completed || !canSubmit) return;
-            setUpdating(true);
+            setUpdating(task.id);
             try {
               await updateTask(task.id, { completed: true, pm_text_response: textValues[task.id].trim() });
               onTaskUpdate();
             } catch (err) {
               console.error('Error updating task:', err);
             } finally {
-              setUpdating(false);
+              setUpdating(null);
             }
           };
 

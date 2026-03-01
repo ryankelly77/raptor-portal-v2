@@ -229,7 +229,7 @@ export function TimelinePhase({
               surveyToken={surveyToken}
               surveyClicks={surveyClicks}
               surveyCompletions={surveyCompletions}
-              pmTask={phase.tasks.find((t) => t.label.startsWith('[PM]'))}
+              pmTasks={phase.tasks.filter((t) => t.label.startsWith('[PM]') && !t.label.startsWith('[PM-TEXT]'))}
               pmTextTasks={phase.tasks.filter((t) => t.label.startsWith('[PM-TEXT]'))}
               onTaskUpdate={onRefresh}
               readOnly={readOnly}
