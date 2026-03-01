@@ -584,24 +584,29 @@ export default function ProjectEditorPage() {
                     ) : (
                       <div className={styles.detailsGrid}>
                         <div>
-                          <strong>Property:</strong> {property?.name || 'Unknown'}
+                          <strong>Property</strong>
+                          {property?.name || 'Unknown'}
                         </div>
                         <div>
-                          <strong>Location:</strong> {location?.name || 'Unknown'}
+                          <strong>Location</strong>
+                          {location?.name || 'Unknown'}
                           {location?.floor ? ` (Floor ${location.floor})` : ''}
                         </div>
                         <div>
-                          <strong>Property Manager:</strong> {propertyManager?.name || 'Not assigned'}
+                          <strong>Property Manager</strong>
+                          {propertyManager?.name || 'Not assigned'}
                           {propertyManager?.company ? ` (${propertyManager.company})` : ''}
                         </div>
                         <div>
-                          <strong>Configuration:</strong> {project.configuration || 'Not set'}
+                          <strong>Est. Completion</strong>
+                          {project.estimated_completion || 'Not set'}
                         </div>
                         <div>
-                          <strong>Est. Completion:</strong> {project.estimated_completion || 'Not set'}
+                          <strong>Public Token</strong>
+                          <code style={{ fontSize: '13px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{project.public_token}</code>
                         </div>
                         <div className={styles.progressRow}>
-                          <strong>Progress:</strong>
+                          <strong>Progress</strong>
                           <div className={styles.progressBarContainer}>
                             <div className={styles.progressBar}>
                               <div
@@ -614,7 +619,6 @@ export default function ProjectEditorPage() {
                           <button
                             className={styles.btnSmall}
                             onClick={async () => {
-                              // Recalculate progress based on tasks
                               let total = 0, done = 0;
                               phases.forEach(phase => {
                                 phase.tasks?.forEach(task => {
@@ -630,40 +634,43 @@ export default function ProjectEditorPage() {
                             Recalculate
                           </button>
                         </div>
-                        <div>
-                          <strong>Public Token:</strong> <code>{project.public_token}</code>
+                        <div className={styles.fullWidth}>
+                          <strong>Configuration</strong>
+                          {project.configuration || 'Not set'}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <strong>Email Reminders:</strong>{' '}
+                        <div className={styles.fullWidth} style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                          <strong style={{ display: 'inline', marginBottom: 0 }}>Email Reminders</strong>
                           <span className={project.email_reminders_enabled ? styles.reminderOn : styles.reminderOff}>
                             {project.email_reminders_enabled ? 'ON' : 'OFF'}
                           </span>
-                          <button
-                            className={styles.btnSmall}
-                            onClick={async () => {
-                              if (!window.confirm('Send reminder email for this project now?')) return;
-                              try {
-                                const response = await fetch('/api/cron/send-reminders', {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': 'Bearer ' + sessionStorage.getItem('adminToken'),
-                                  },
-                                  body: JSON.stringify({ projectId: project.id, force: true }),
-                                });
-                                const data = await response.json();
-                                if (data.success) {
-                                  alert('Reminder sent successfully!');
-                                } else {
-                                  alert('Error: ' + (data.error || 'Failed to send'));
+                          {project.email_reminders_enabled && (
+                            <button
+                              className={styles.btnSmall}
+                              onClick={async () => {
+                                if (!window.confirm('Send reminder email for this project now?')) return;
+                                try {
+                                  const response = await fetch('/api/cron/send-reminders', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': 'Bearer ' + sessionStorage.getItem('adminToken'),
+                                    },
+                                    body: JSON.stringify({ projectId: project.id, force: true }),
+                                  });
+                                  const data = await response.json();
+                                  if (data.success) {
+                                    alert('Reminder sent successfully!');
+                                  } else {
+                                    alert('Error: ' + (data.error || 'Failed to send'));
+                                  }
+                                } catch (err) {
+                                  alert('Failed: ' + (err instanceof Error ? err.message : 'Unknown'));
                                 }
-                              } catch (err) {
-                                alert('Failed: ' + (err instanceof Error ? err.message : 'Unknown'));
-                              }
-                            }}
-                          >
-                            Send Reminder Now
-                          </button>
+                              }}
+                            >
+                              Send Reminder Now
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
