@@ -3,13 +3,25 @@
  *
  * Use this for ALL admin API calls to ensure consistent auth handling.
  * - Automatically includes Authorization header from sessionStorage
- * - Throws immediately if no token (prevents silent auth failures)
- * - Handles 401 responses by clearing session and redirecting to login
+ * - Throws ApiError with detailed info (endpoint, status, message)
+ * - Does NOT redirect - caller handles errors
  */
 
-export class AuthError extends Error {
-  constructor(message: string) {
+export class ApiError extends Error {
+  endpoint: string;
+  status: number;
+
+  constructor(message: string, endpoint: string, status: number) {
     super(message);
+    this.name = 'ApiError';
+    this.endpoint = endpoint;
+    this.status = status;
+  }
+}
+
+export class AuthError extends ApiError {
+  constructor(message: string, endpoint: string = 'unknown', status: number = 0) {
+    super(message, endpoint, status);
     this.name = 'AuthError';
   }
 }
@@ -20,14 +32,14 @@ export class AuthError extends Error {
  */
 export function getAdminToken(): string {
   if (typeof window === 'undefined') {
-    throw new AuthError('Cannot access auth token on server');
+    throw new AuthError('Cannot access auth token on server', 'server', 0);
   }
 
   const token = sessionStorage.getItem('adminToken');
 
   if (!token) {
     console.error('[Auth] No admin token in sessionStorage');
-    throw new AuthError('Not logged in');
+    throw new AuthError('No admin token in sessionStorage - not logged in', 'sessionStorage', 0);
   }
 
   return token;
@@ -51,7 +63,7 @@ export function clearSessionAndRedirect(): void {
  * @param url - The API endpoint URL
  * @param options - Fetch options (method, body, etc.)
  * @returns The fetch Response
- * @throws AuthError if no token or if 401 response
+ * @throws AuthError if no token, ApiError on non-2xx responses
  */
 export async function adminFetch(url: string, options: RequestInit = {}): Promise<Response> {
   let token: string;
@@ -59,8 +71,12 @@ export async function adminFetch(url: string, options: RequestInit = {}): Promis
   try {
     token = getAdminToken();
   } catch (e) {
-    clearSessionAndRedirect();
-    throw e;
+    // Re-throw with endpoint info - DO NOT REDIRECT
+    throw new AuthError(
+      `No token available when calling ${url}`,
+      url,
+      0
+    );
   }
 
   // Build headers - handle both JSON and FormData
@@ -81,17 +97,23 @@ export async function adminFetch(url: string, options: RequestInit = {}): Promis
   }
 
   console.log(`[AdminFetch] ${options.method || 'GET'} ${url}`);
+  console.log(`[AdminFetch] Token present: ${token ? 'YES (' + token.substring(0, 20) + '...)' : 'NO'}`);
 
   const response = await fetch(url, {
     ...options,
     headers,
   });
 
-  // Handle 401 - token expired or invalid
+  console.log(`[AdminFetch] Response: ${response.status} ${response.statusText}`);
+
+  // Handle 401 - token expired or invalid - DO NOT REDIRECT
   if (response.status === 401) {
     console.error('[AdminFetch] 401 Unauthorized - token expired or invalid');
-    clearSessionAndRedirect();
-    throw new AuthError('Session expired');
+    throw new AuthError(
+      `401 Unauthorized - token expired or invalid`,
+      url,
+      401
+    );
   }
 
   return response;
@@ -104,7 +126,7 @@ export async function adminFetch(url: string, options: RequestInit = {}): Promis
  * @param options - Fetch options
  * @returns The parsed JSON response
  */
-export async function adminFetchJson<T = any>(url: string, options: RequestInit = {}): Promise<T> {
+export async function adminFetchJson<T = unknown>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await adminFetch(url, options);
   return response.json();
 }

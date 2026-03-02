@@ -5,11 +5,17 @@ import { useRouter } from 'next/navigation';
 import { AdminShell } from '../../components/AdminShell';
 import { BarcodeScanner } from '../components/BarcodeScanner';
 import { BarcodeLookup } from '../components/BarcodeLookup';
-import { adminFetch, AuthError } from '@/lib/admin-fetch';
+import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-E';
+const BUILD_VERSION = 'v2024-MAR01-F';
+
+interface ErrorInfo {
+  message: string;
+  endpoint: string;
+  status: number;
+}
 
 interface ScannedItem {
   barcode: string;
@@ -50,7 +56,7 @@ export default function ReceiveItemsPage() {
   // Final state
   const [receiptTotal, setReceiptTotal] = useState('');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -215,11 +221,27 @@ export default function ReceiveItemsPage() {
         setOcrProcessing(false);
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Receive] Receipt error:', err);
-      // Don't show error for auth errors - they redirect to login
-      if (!(err instanceof AuthError)) {
-        setError(err.message || 'Failed to upload receipt');
+      // Show ALL errors visibly - DO NOT REDIRECT
+      if (err instanceof ApiError || err instanceof AuthError) {
+        setError({
+          message: err.message,
+          endpoint: err.endpoint,
+          status: err.status,
+        });
+      } else if (err instanceof Error) {
+        setError({
+          message: err.message,
+          endpoint: '/api/admin/upload',
+          status: 0,
+        });
+      } else {
+        setError({
+          message: 'Unknown error during receipt upload',
+          endpoint: '/api/admin/upload',
+          status: 0,
+        });
       }
     } finally {
       setReceiptUploading(false);
@@ -235,7 +257,7 @@ export default function ReceiveItemsPage() {
   // Save everything
   const handleSave = async () => {
     if (items.length === 0) {
-      setError('No items to save');
+      setError({ message: 'No items to save', endpoint: 'validation', status: 0 });
       return;
     }
 
@@ -338,12 +360,29 @@ export default function ReceiveItemsPage() {
       alert('Purchase saved successfully!');
       router.push('/admin/inventory');
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Receive] Save error:', err);
-      // Don't show error for auth errors - they redirect to login
-      if (!(err instanceof AuthError)) {
-        setError(err.message || 'Failed to save purchase');
+      // Show ALL errors visibly - DO NOT REDIRECT, DO NOT CLEAR STATE
+      if (err instanceof ApiError || err instanceof AuthError) {
+        setError({
+          message: err.message,
+          endpoint: err.endpoint,
+          status: err.status,
+        });
+      } else if (err instanceof Error) {
+        setError({
+          message: err.message,
+          endpoint: '/api/admin/crud',
+          status: 0,
+        });
+      } else {
+        setError({
+          message: 'Unknown error during save',
+          endpoint: '/api/admin/crud',
+          status: 0,
+        });
       }
+      // Items remain in state - nothing is lost
     } finally {
       setSaving(false);
     }
@@ -359,10 +398,38 @@ export default function ReceiveItemsPage() {
           {BUILD_VERSION} | Step: {step} | Items: {totalItemCount}
         </div>
 
-        {/* Error display */}
+        {/* Error display - VISIBLE BANNER */}
         {error && (
-          <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-            {error}
+          <div style={{
+            background: '#fef2f2',
+            border: '2px solid #dc2626',
+            color: '#dc2626',
+            padding: '16px',
+            borderRadius: '8px',
+            marginBottom: '16px',
+            fontFamily: 'monospace',
+            fontSize: '13px',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>
+              ERROR
+            </div>
+            <div><strong>Message:</strong> {error.message}</div>
+            <div><strong>Endpoint:</strong> {error.endpoint}</div>
+            <div><strong>Status:</strong> {error.status}</div>
+            <button
+              onClick={() => setError(null)}
+              style={{
+                marginTop: '12px',
+                padding: '8px 16px',
+                background: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
