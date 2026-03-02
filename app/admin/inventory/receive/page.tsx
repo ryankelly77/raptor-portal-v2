@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-K';
+const BUILD_VERSION = 'v2024-MAR01-M';
 
 interface ErrorInfo {
   message: string;
@@ -27,17 +27,28 @@ interface ScannedItem {
   productId?: string;
   isNew?: boolean;
   image_url?: string | null;
-  matchConfidence?: 'alias' | 'ai-high' | 'ai-medium' | 'ai-low' | 'high' | 'medium' | 'none';
+  matchConfidence?: 'alias' | 'ai-high' | 'ai-medium' | 'ai-low' | 'none';
   matchedOcrLine?: string;
   aiReasoning?: string;
 }
 
-interface ParsedOCRItem {
-  description: string;
+// AI-parsed receipt item (from Vision API)
+interface AIParsedItem {
+  receipt_text: string;
+  parsed_name: string;
+  barcode: string | null;
   price: number;
-  matched?: boolean;
-  matchedProductId?: string;
-  aiReasoning?: string;
+  quantity: number;
+  product_id: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  is_new_product: boolean;
+  suggested_brand: string | null;
+  suggested_category: string | null;
+  reasoning: string;
+  // UI state
+  accepted?: boolean;
+  skipped?: boolean;
+  linkedBarcode?: string;
 }
 
 interface ReceiptAlias {
@@ -45,48 +56,6 @@ interface ReceiptAlias {
   store_name: string | null;
   receipt_text: string;
   product_id: string;
-}
-
-interface AIMatchResult {
-  receipt_index: number;
-  product_id: string | null;
-  confidence: 'high' | 'medium' | 'low' | 'none';
-  reasoning: string;
-}
-
-// Fuzzy matching: calculate word overlap score
-function fuzzyMatch(scannedName: string, scannedBrand: string | null, ocrDescription: string): number {
-  const scannedWords = ((scannedBrand || '') + ' ' + scannedName)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .split(/\s+/)
-    .filter(w => w.length > 2);
-
-  const ocrWords = ocrDescription
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .split(/\s+/)
-    .filter(w => w.length > 1); // Allow shorter words for abbreviations
-
-  if (scannedWords.length === 0 || ocrWords.length === 0) return 0;
-
-  let matchCount = 0;
-  for (const sw of scannedWords) {
-    for (const ow of ocrWords) {
-      // Check for substring match (handles abbreviations like "BLK" vs "BLACK", "MNSTR" vs "MONSTER")
-      if (sw.includes(ow) || ow.includes(sw) || sw === ow) {
-        matchCount++;
-        break;
-      }
-      // Check for first 3 chars match (BLK vs BLACK)
-      if (sw.length >= 3 && ow.length >= 3 && sw.substring(0, 3) === ow.substring(0, 3)) {
-        matchCount += 0.5;
-        break;
-      }
-    }
-  }
-
-  return matchCount / Math.max(scannedWords.length, 1);
 }
 
 export default function ReceiveItemsPage() {
@@ -102,14 +71,15 @@ export default function ReceiveItemsPage() {
   // Receipt data
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptUploading, setReceiptUploading] = useState(false);
+  const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
 
-  // OCR state
-  const [ocrStatus, setOcrStatus] = useState<string>('');
-  const [ocrProgress, setOcrProgress] = useState<number>(0);
-  const [ocrRawText, setOcrRawText] = useState<string>('');
-  const [ocrItems, setOcrItems] = useState<ParsedOCRItem[]>([]);
-  const [showDebugText, setShowDebugText] = useState(false);
+  // AI Vision state
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [aiStatus, setAiStatus] = useState<string>('');
+  const [aiParsedItems, setAiParsedItems] = useState<AIParsedItem[]>([]);
+  const [aiTotal, setAiTotal] = useState<number | null>(null);
+  const [aiSubtotal, setAiSubtotal] = useState<number | null>(null);
+  const [aiNotes, setAiNotes] = useState<string>('');
 
   // Purchase info
   const [storeName, setStoreName] = useState("Sam's");
@@ -125,10 +95,6 @@ export default function ReceiveItemsPage() {
   const [aliases, setAliases] = useState<ReceiptAlias[]>([]);
   const [aliasesLoaded, setAliasesLoaded] = useState(false);
   const [savingAlias, setSavingAlias] = useState<string | null>(null);
-
-  // AI matching
-  const [aiMatching, setAiMatching] = useState(false);
-  const [aiMatchStatus, setAiMatchStatus] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -237,249 +203,7 @@ export default function ReceiveItemsPage() {
     setItems(items.filter(i => i.barcode !== barcode));
   };
 
-  // Run CLIENT-SIDE OCR with Tesseract.js
-  const runOCR = async (imageFile: File) => {
-    setOcrStatus('Loading OCR engine...');
-    setOcrProgress(0);
-    setOcrRawText('');
-    setOcrItems([]);
-
-    try {
-      console.log('[OCR] Starting Tesseract...');
-      const Tesseract = (await import('tesseract.js')).default;
-
-      const result = await Tesseract.recognize(imageFile, 'eng', {
-        logger: (info: { status: string; progress: number }) => {
-          console.log('[OCR]', info.status, info.progress);
-          if (info.status === 'recognizing text') {
-            const pct = Math.round(info.progress * 100);
-            setOcrProgress(pct);
-            setOcrStatus(`Reading receipt... ${pct}%`);
-          } else if (info.status === 'loading language traineddata') {
-            setOcrStatus('Loading language data...');
-          }
-        },
-      });
-
-      const rawText = result.data.text;
-      console.log('[OCR] RAW TEXT:', rawText);
-      setOcrRawText(rawText);
-      setOcrStatus('Parsing prices...');
-
-      // Parse the text for prices - handles Walmart format (no $, tax codes like F/T/X)
-      const lines = rawText.split('\n').filter(l => l.trim());
-      const parsedItems: ParsedOCRItem[] = [];
-      let foundTotal: number | null = null;
-
-      console.log('[OCR] Parsing', lines.length, 'lines');
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.length < 3) continue;
-
-        console.log('[OCR] Line:', trimmed);
-
-        // Check for multi-quantity format: "2 @ 2.99" or "2 @ 2.99    5.98"
-        const multiQtyMatch = trimmed.match(/(\d+)\s*[@xX]\s*(\d+\.\d{2})/);
-        if (multiQtyMatch) {
-          const qty = parseInt(multiQtyMatch[1]);
-          const unitPrice = parseFloat(multiQtyMatch[2]);
-          const description = trimmed.replace(/\d+\s*[@xX]\s*\d+\.\d{2}.*$/, '').trim();
-          if (description && unitPrice > 0) {
-            parsedItems.push({ description, price: unitPrice });
-            console.log('[OCR] Multi-qty item:', description, qty, 'x $' + unitPrice);
-            continue;
-          }
-        }
-
-        // Pattern: price with optional $ and optional tax code letter at end
-        // Handles: $4.98, 4.98, 4.98 F, 4.98F, $ 4.98
-        const priceMatch = trimmed.match(/\$?\s?(\d{1,3}\.\d{2})\s*[A-Z]?\s*$/);
-        if (priceMatch) {
-          const price = parseFloat(priceMatch[1]);
-          const description = trimmed.replace(priceMatch[0], '').trim();
-
-          // Skip totals, tax, payment lines
-          if (/total|subtotal|tax|change|cash|credit|debit|visa|master|card|payment|balance|savings|tend/i.test(description)) {
-            if (/total/i.test(description) && !/sub/i.test(description)) {
-              foundTotal = price;
-              console.log('[OCR] Found total:', price);
-            }
-            continue;
-          }
-
-          // Skip very small amounts that are likely tax/fees
-          if (price < 0.50 && description.length < 5) continue;
-
-          // Skip empty descriptions
-          if (!description) continue;
-
-          // Skip lines that look like dates, times, phone numbers
-          if (/^\d{1,2}[\/\-]\d{1,2}|^\d{3}[\-\s]\d{3}|manager|cashier|store|#\d+/i.test(description)) continue;
-
-          if (price > 0 && price < 500) {
-            parsedItems.push({ description, price });
-            console.log('[OCR] Parsed item:', description, '$' + price);
-          }
-        }
-      }
-
-      console.log('[OCR] Total parsed items:', parsedItems.length);
-      setOcrItems(parsedItems);
-
-      if (foundTotal) {
-        setReceiptTotal(foundTotal.toFixed(2));
-      }
-
-      setOcrStatus(`Found ${parsedItems.length} items`);
-      return { rawText, items: parsedItems, total: foundTotal };
-
-    } catch (err) {
-      console.error('[OCR] FAILED:', err);
-      setOcrStatus('OCR failed. Enter prices manually.');
-      return { rawText: '', items: [], total: null };
-    }
-  };
-
-  // Match OCR items to scanned products - uses ALIAS first, then AI
-  const matchOcrToProducts = async () => {
-    const ocrItemsCopy: ParsedOCRItem[] = ocrItems.map(item => ({ ...item, matched: false }));
-    const updatedItems: ScannedItem[] = items.map(item => ({
-      ...item,
-      matchConfidence: 'none' as const,
-      matchedOcrLine: undefined,
-      aiReasoning: undefined,
-    }));
-
-    // PHASE 1: Match via aliases (highest priority - free & instant)
-    const storeAliases = aliases.filter(a => !a.store_name || a.store_name === storeName);
-    console.log(`[Match] Checking ${storeAliases.length} aliases for store "${storeName}"`);
-
-    for (let j = 0; j < ocrItemsCopy.length; j++) {
-      if (ocrItemsCopy[j].matched) continue;
-
-      const ocrText = ocrItemsCopy[j].description.toUpperCase().trim();
-
-      for (const alias of storeAliases) {
-        const aliasText = alias.receipt_text.toUpperCase().trim();
-
-        if (ocrText.includes(aliasText) || aliasText.includes(ocrText)) {
-          const scannedIdx = updatedItems.findIndex(
-            si => si.productId === alias.product_id && si.matchConfidence === 'none'
-          );
-
-          if (scannedIdx >= 0) {
-            ocrItemsCopy[j].matched = true;
-            ocrItemsCopy[j].matchedProductId = alias.product_id;
-
-            updatedItems[scannedIdx] = {
-              ...updatedItems[scannedIdx],
-              unitCost: ocrItemsCopy[j].price.toFixed(2),
-              matchConfidence: 'alias',
-              matchedOcrLine: ocrItemsCopy[j].description,
-            };
-            console.log(`[Match] ALIAS MATCH: "${updatedItems[scannedIdx].name}" <- "${ocrItemsCopy[j].description}" @ $${ocrItemsCopy[j].price}`);
-            break;
-          }
-        }
-      }
-    }
-
-    // PHASE 2: AI matching for remaining unmatched items
-    const unmatchedOcr = ocrItemsCopy.filter(o => !o.matched);
-    const unmatchedProducts = updatedItems.filter(i => i.matchConfidence === 'none' && i.productId);
-
-    if (unmatchedOcr.length > 0 && unmatchedProducts.length > 0) {
-      setAiMatching(true);
-      setAiMatchStatus('Matching items with AI...');
-
-      try {
-        // Prepare data for AI
-        const ocrLines = unmatchedOcr.map(o => ({
-          description: o.description,
-          price: o.price
-        }));
-
-        const products = unmatchedProducts.map(p => ({
-          id: p.productId!,
-          brand: p.brand,
-          name: p.name,
-          category: p.category
-        }));
-
-        console.log(`[AI Match] Sending ${ocrLines.length} OCR lines and ${products.length} products`);
-
-        const res = await adminFetch('/api/admin/inventory/match-receipt', {
-          method: 'POST',
-          body: JSON.stringify({
-            ocrLines,
-            products,
-            storeName
-          }),
-        });
-
-        const data = await res.json();
-
-        if (res.ok && data.matches) {
-          console.log('[AI Match] Received', data.matches.length, 'matches');
-
-          // Apply AI matches
-          for (const match of data.matches as AIMatchResult[]) {
-            if (!match.product_id || match.confidence === 'none') continue;
-
-            const ocrItem = unmatchedOcr[match.receipt_index];
-            if (!ocrItem || ocrItem.matched) continue;
-
-            // Find the scanned item with this product_id
-            const scannedIdx = updatedItems.findIndex(
-              si => si.productId === match.product_id && si.matchConfidence === 'none'
-            );
-
-            if (scannedIdx >= 0) {
-              // Find original OCR index
-              const origOcrIdx = ocrItemsCopy.findIndex(o => o.description === ocrItem.description && !o.matched);
-              if (origOcrIdx >= 0) {
-                ocrItemsCopy[origOcrIdx].matched = true;
-                ocrItemsCopy[origOcrIdx].matchedProductId = match.product_id;
-                ocrItemsCopy[origOcrIdx].aiReasoning = match.reasoning;
-              }
-
-              const confidenceMap: Record<string, 'ai-high' | 'ai-medium' | 'ai-low'> = {
-                high: 'ai-high',
-                medium: 'ai-medium',
-                low: 'ai-low'
-              };
-
-              updatedItems[scannedIdx] = {
-                ...updatedItems[scannedIdx],
-                unitCost: ocrItem.price.toFixed(2),
-                matchConfidence: confidenceMap[match.confidence] || 'ai-low',
-                matchedOcrLine: ocrItem.description,
-                aiReasoning: match.reasoning,
-              };
-
-              console.log(`[AI Match] ${match.confidence.toUpperCase()}: "${updatedItems[scannedIdx].name}" <- "${ocrItem.description}" (${match.reasoning})`);
-            }
-          }
-
-          setAiMatchStatus(`AI matched ${data.matches.filter((m: AIMatchResult) => m.product_id && m.confidence !== 'none').length} items`);
-        } else {
-          console.error('[AI Match] Failed:', data.error);
-          setAiMatchStatus('AI matching failed - using manual mode');
-        }
-      } catch (err) {
-        console.error('[AI Match] Error:', err);
-        setAiMatchStatus('AI matching error - using manual mode');
-      } finally {
-        setAiMatching(false);
-      }
-    }
-
-    setItems(updatedItems);
-    setOcrItems(ocrItemsCopy);
-  };
-
-  // Handle receipt photo capture
+  // Handle receipt photo capture - just create preview, no OCR
   const handleReceiptCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -493,24 +217,22 @@ export default function ReceiveItemsPage() {
       setReceiptImage(ev.target?.result as string);
     };
     reader.readAsDataURL(file);
-
-    // Run OCR immediately
-    await runOCR(file);
   };
 
-  // Upload receipt and proceed to reconciliation
+  // Upload receipt and send to AI Vision for parsing
   const handleProceedToReconcile = async () => {
     if (!receiptFile) {
-      // No receipt, skip to submit
+      // No receipt, skip to reconcile with empty AI results
       setStep('reconcile');
       return;
     }
 
-    setReceiptUploading(true);
+    setAiProcessing(true);
+    setAiStatus('Uploading receipt...');
     setError(null);
 
     try {
-      // Upload to Supabase
+      // 1. Upload to Supabase
       const formData = new FormData();
       formData.append('file', receiptFile);
       formData.append('folder', 'receipts');
@@ -525,22 +247,98 @@ export default function ReceiveItemsPage() {
         throw new Error(uploadData.error || 'Upload failed');
       }
 
-      setReceiptImage(uploadData.url);
+      const imageUrl = uploadData.url;
+      setReceiptImageUrl(imageUrl);
+      setReceiptImage(imageUrl);
+      console.log('[AI Vision] Receipt uploaded:', imageUrl);
 
-      // Match OCR items to products (alias + AI)
-      await matchOcrToProducts();
+      // 2. Build product catalog from scanned items + all products
+      setAiStatus('AI is reading your receipt...');
+
+      // Fetch all products for the catalog
+      const productsRes = await adminFetch('/api/admin/crud', {
+        method: 'POST',
+        body: JSON.stringify({ table: 'products', action: 'read' }),
+      });
+      const productsData = await productsRes.json();
+      const allProducts = productsData.data || [];
+
+      const products = allProducts.map((p: any) => ({
+        id: p.id,
+        brand: p.brand,
+        name: p.name,
+        barcode: p.barcode,
+        category: p.category,
+      }));
+
+      console.log('[AI Vision] Sending image with', products.length, 'products in catalog');
+
+      // 3. Send to AI Vision endpoint
+      const res = await adminFetch('/api/admin/inventory/match-receipt', {
+        method: 'POST',
+        body: JSON.stringify({
+          imageUrl,
+          products,
+          storeName
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        console.log('[AI Vision] Success:', data.items?.length, 'items parsed');
+
+        // Apply alias overrides
+        const storeAliases = aliases.filter(a => !a.store_name || a.store_name === storeName);
+        const parsedItems: AIParsedItem[] = (data.items || []).map((item: AIParsedItem) => {
+          // Check aliases first
+          for (const alias of storeAliases) {
+            if (item.receipt_text.toUpperCase().includes(alias.receipt_text.toUpperCase())) {
+              // Found alias match - override AI's product_id
+              const aliasProduct = allProducts.find((p: any) => p.id === alias.product_id);
+              if (aliasProduct) {
+                return {
+                  ...item,
+                  product_id: alias.product_id,
+                  is_new_product: false,
+                  confidence: 'high' as const,
+                  reasoning: `Alias match: "${alias.receipt_text}"`
+                };
+              }
+            }
+          }
+          return item;
+        });
+
+        setAiParsedItems(parsedItems);
+        setAiTotal(data.total);
+        setAiSubtotal(data.subtotal);
+        setAiNotes(data.notes || '');
+
+        if (data.total) {
+          setReceiptTotal(data.total.toFixed(2));
+        }
+
+        const matchedCount = parsedItems.filter((i: AIParsedItem) => i.product_id).length;
+        const newCount = parsedItems.filter((i: AIParsedItem) => i.is_new_product).length;
+        setAiStatus(`Found ${parsedItems.length} items: ${matchedCount} matched, ${newCount} new`);
+
+      } else {
+        console.error('[AI Vision] Failed:', data.error);
+        setAiStatus(`AI parsing failed: ${data.error || 'Unknown error'}`);
+      }
 
       setStep('reconcile');
 
     } catch (err: unknown) {
-      console.error('[Receive] Upload error:', err);
+      console.error('[Receive] Error:', err);
       if (err instanceof ApiError || err instanceof AuthError) {
         setError({ message: err.message, endpoint: err.endpoint, status: err.status });
       } else if (err instanceof Error) {
-        setError({ message: err.message, endpoint: '/api/admin/upload', status: 0 });
+        setError({ message: err.message, endpoint: '/api/admin/inventory/match-receipt', status: 0 });
       }
     } finally {
-      setReceiptUploading(false);
+      setAiProcessing(false);
     }
   };
 
@@ -552,12 +350,6 @@ export default function ReceiveItemsPage() {
 
   const receiptTotalNum = parseFloat(receiptTotal) || 0;
   const difference = Math.abs(receiptTotalNum - calculatedTotal);
-
-  // Get unmatched OCR items
-  const unmatchedOcrItems = ocrItems.filter(item => !item.matched);
-
-  // Get unpriced scanned items
-  const unpricedItems = items.filter(item => !item.unitCost);
 
   // Save everything
   const handleSave = async () => {
@@ -580,7 +372,7 @@ export default function ReceiveItemsPage() {
             purchased_by: purchasedBy,
             store_name: storeName,
             purchase_date: purchaseDate,
-            receipt_image_url: receiptImage,
+            receipt_image_url: receiptImageUrl || receiptImage,
             receipt_total: receiptTotalNum || calculatedTotal,
             status: 'verified',
           },
@@ -674,7 +466,7 @@ export default function ReceiveItemsPage() {
       <div className={styles.inventoryPage}>
         {/* Build version */}
         <div style={{ background: '#dbeafe', color: '#1e40af', padding: '6px 12px', borderRadius: '6px', marginBottom: '12px', fontSize: '11px', fontFamily: 'monospace' }}>
-          {BUILD_VERSION} | Step: {step} | Items: {totalItemCount} | OCR: {ocrItems.length} lines
+          {BUILD_VERSION} | Step: {step} | Items: {totalItemCount}
         </div>
 
         {/* Error display */}
@@ -734,7 +526,7 @@ export default function ReceiveItemsPage() {
               <div style={{ marginBottom: '16px' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={receiptImage} alt="Receipt" style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '12px', border: '1px solid #e5e7eb' }} />
-                <button onClick={() => { setReceiptImage(null); setReceiptFile(null); setOcrRawText(''); setOcrItems([]); setOcrStatus(''); fileInputRef.current?.click(); }} style={{ width: '100%', marginTop: '8px', padding: '10px', background: '#f3f4f6', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <button onClick={() => { setReceiptImage(null); setReceiptFile(null); fileInputRef.current?.click(); }} style={{ width: '100%', marginTop: '8px', padding: '10px', background: '#f3f4f6', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                   Retake Photo
                 </button>
               </div>
@@ -747,76 +539,12 @@ export default function ReceiveItemsPage() {
               </div>
             )}
 
-            {/* OCR Progress */}
-            {ocrStatus && (
+            {/* AI Processing Status */}
+            {aiProcessing && (
               <div style={{ padding: '16px', background: '#dbeafe', borderRadius: '8px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                  {ocrProgress > 0 && ocrProgress < 100 && <div className={styles.spinner} />}
-                  <span style={{ fontWeight: 600 }}>{ocrStatus}</span>
-                </div>
-                {ocrProgress > 0 && ocrProgress < 100 && (
-                  <div style={{ height: '8px', background: '#bfdbfe', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${ocrProgress}%`, background: '#3b82f6', transition: 'width 0.3s' }} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* OCR Results Preview */}
-            {ocrItems.length > 0 && (
-              <div style={{ padding: '12px', background: '#f0fdf4', border: '1px solid #22c55e', borderRadius: '8px', marginBottom: '16px' }}>
-                <div style={{ fontWeight: 600, color: '#16a34a', marginBottom: '8px' }}>✓ Found {ocrItems.length} items on receipt</div>
-                {receiptTotal && <div style={{ fontSize: '13px', color: '#374151' }}>Total: ${receiptTotal}</div>}
-              </div>
-            )}
-
-            {/* DEBUG: Always visible OCR output */}
-            {(ocrRawText || ocrItems.length > 0 || ocrStatus) && (
-              <div style={{ background: '#f5f5f5', padding: '16px', marginBottom: '16px', borderRadius: '8px', border: '1px solid #d1d5db' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 700, color: '#374151' }}>DEBUG: OCR Output</h4>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <strong style={{ fontSize: '12px' }}>Status:</strong>
-                  <span style={{ fontSize: '12px', marginLeft: '8px' }}>{ocrStatus || 'Not started'}</span>
-                </div>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <strong style={{ fontSize: '12px' }}>Raw Text ({ocrRawText.length} chars):</strong>
-                  <pre style={{
-                    marginTop: '8px',
-                    padding: '12px',
-                    background: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontFamily: 'monospace',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    maxHeight: '200px',
-                    overflow: 'auto',
-                    margin: 0
-                  }}>
-                    {ocrRawText || '(no text detected)'}
-                  </pre>
-                </div>
-
-                <div>
-                  <strong style={{ fontSize: '12px' }}>Parsed Items ({ocrItems.length}):</strong>
-                  <pre style={{
-                    marginTop: '8px',
-                    padding: '12px',
-                    background: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontFamily: 'monospace',
-                    whiteSpace: 'pre-wrap',
-                    maxHeight: '150px',
-                    overflow: 'auto',
-                    margin: 0
-                  }}>
-                    {ocrItems.length > 0 ? JSON.stringify(ocrItems, null, 2) : '(no items parsed)'}
-                  </pre>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className={styles.spinner} />
+                  <span style={{ fontWeight: 600 }}>{aiStatus}</span>
                 </div>
               </div>
             )}
@@ -849,8 +577,8 @@ export default function ReceiveItemsPage() {
 
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={() => setStep('scan')} style={{ flex: 1, padding: '14px', background: '#f3f4f6', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}>Back</button>
-              <button onClick={handleProceedToReconcile} disabled={receiptUploading || aiMatching} style={{ flex: 1, padding: '14px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: (receiptUploading || aiMatching) ? 'wait' : 'pointer' }}>
-                {receiptUploading ? 'Uploading...' : aiMatching ? 'AI Matching...' : 'Match with AI'}
+              <button onClick={handleProceedToReconcile} disabled={aiProcessing} style={{ flex: 1, padding: '14px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: aiProcessing ? 'wait' : 'pointer' }}>
+                {aiProcessing ? 'Processing...' : receiptFile ? 'Scan with AI' : 'Skip Receipt'}
               </button>
             </div>
           </div>
@@ -861,191 +589,232 @@ export default function ReceiveItemsPage() {
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '16px' }}>Reconcile Prices</h2>
 
-            {/* AI Matching Status */}
-            {(aiMatching || aiMatchStatus) && (
-              <div style={{ padding: '12px 16px', background: aiMatching ? '#dbeafe' : '#f0fdf4', border: `1px solid ${aiMatching ? '#3b82f6' : '#22c55e'}`, borderRadius: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {aiMatching && <div className={styles.spinner} />}
-                <span style={{ fontWeight: 500, color: aiMatching ? '#1d4ed8' : '#16a34a' }}>
-                  {aiMatchStatus || 'Matching with AI...'}
-                </span>
+            {/* AI Status */}
+            {aiStatus && (
+              <div style={{ padding: '12px 16px', background: '#f0fdf4', border: '1px solid #22c55e', borderRadius: '8px', marginBottom: '16px' }}>
+                <span style={{ fontWeight: 500, color: '#16a34a' }}>{aiStatus}</span>
               </div>
             )}
 
-            {/* Section 1: Matched Items */}
-            <div style={{ marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: '#22c55e' }}>✓</span> Matched Items ({items.filter(i => i.matchConfidence !== 'none').length})
-              </h3>
-              {items.filter(i => i.matchConfidence !== 'none').map((item) => {
-                // Determine colors and labels based on match confidence
-                let bgColor = '#fefce8';
-                let borderColor = '#facc15';
-                let labelColor = '#ca8a04';
-                let label = '⚠ Check';
+            {/* AI Notes */}
+            {aiNotes && (
+              <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', color: '#92400e' }}>
+                <strong>AI Notes:</strong> {aiNotes}
+              </div>
+            )}
 
-                if (item.matchConfidence === 'alias') {
-                  bgColor = '#dbeafe'; borderColor = '#3b82f6'; labelColor = '#1d4ed8'; label = '✓ Alias';
-                } else if (item.matchConfidence === 'ai-high') {
-                  bgColor = '#f0fdf4'; borderColor = '#22c55e'; labelColor = '#16a34a'; label = '✓ AI High';
-                } else if (item.matchConfidence === 'ai-medium') {
-                  bgColor = '#fefce8'; borderColor = '#facc15'; labelColor = '#ca8a04'; label = '⚠ AI Medium';
-                } else if (item.matchConfidence === 'ai-low') {
-                  bgColor = '#fef2f2'; borderColor = '#f87171'; labelColor = '#dc2626'; label = '? AI Low';
-                } else if (item.matchConfidence === 'high') {
-                  bgColor = '#f0fdf4'; borderColor = '#22c55e'; labelColor = '#16a34a'; label = '✓ Confident';
-                }
+            {/* Section 1: Matched to Catalog (green) */}
+            {(() => {
+              const matchedItems = aiParsedItems.filter(i => i.product_id && !i.is_new_product && !i.skipped);
+              return matchedItems.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#22c55e' }}>✓</span> Matched to Catalog ({matchedItems.length})
+                  </h3>
+                  {matchedItems.map((aiItem, idx) => {
+                    const product = items.find(i => i.productId === aiItem.product_id);
+                    const bgColor = aiItem.confidence === 'high' ? '#f0fdf4' : aiItem.confidence === 'medium' ? '#fefce8' : '#fef2f2';
+                    const borderColor = aiItem.confidence === 'high' ? '#22c55e' : aiItem.confidence === 'medium' ? '#facc15' : '#f87171';
+                    const labelColor = aiItem.confidence === 'high' ? '#16a34a' : aiItem.confidence === 'medium' ? '#ca8a04' : '#dc2626';
+                    const label = aiItem.confidence === 'high' ? '✓ High' : aiItem.confidence === 'medium' ? '⚠ Medium' : '? Low';
 
-                // Check if alias already exists for this match
-                const aliasExists = item.matchedOcrLine && item.productId && aliases.some(
-                  a => a.receipt_text.toUpperCase() === item.matchedOcrLine?.toUpperCase() && a.product_id === item.productId
-                );
+                    const aliasExists = aliases.some(a =>
+                      a.receipt_text.toUpperCase() === aiItem.receipt_text.toUpperCase() && a.product_id === aiItem.product_id
+                    );
 
-                // Should offer to save alias for AI matches
-                const shouldOfferAlias = (item.matchConfidence === 'ai-high' || item.matchConfidence === 'ai-medium' || item.matchConfidence === 'ai-low' || item.matchConfidence === 'medium')
-                  && item.matchedOcrLine && item.productId && !aliasExists;
+                    return (
+                      <div key={idx} style={{ padding: '12px', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '10px', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', marginBottom: '4px' }}>
+                              &quot;{aiItem.receipt_text}&quot; →
+                            </div>
+                            {product?.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{product.brand}</div>}
+                            <div style={{ fontWeight: 600 }}>{product?.name || aiItem.parsed_name}</div>
+                            {aiItem.reasoning && (
+                              <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '4px', fontStyle: 'italic' }}>
+                                AI: {aiItem.reasoning}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: '12px', color: labelColor, fontWeight: 600 }}>{label}</span>
+                            <div style={{ fontSize: '18px', fontWeight: 700, marginTop: '4px' }}>${aiItem.price.toFixed(2)}</div>
+                            {aiItem.quantity > 1 && <div style={{ fontSize: '11px', color: '#6b7280' }}>x{aiItem.quantity}</div>}
+                          </div>
+                        </div>
 
-                return (
-                  <div key={item.barcode} style={{ padding: '12px', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '10px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                          <button
+                            onClick={() => {
+                              setAiParsedItems(prev => prev.map((item, i) =>
+                                i === aiParsedItems.indexOf(aiItem) ? { ...item, accepted: true } : item
+                              ));
+                              // Update the scanned item with the price
+                              if (product) {
+                                setItems(prev => prev.map(i =>
+                                  i.productId === aiItem.product_id
+                                    ? { ...i, unitCost: aiItem.price.toFixed(2), quantity: aiItem.quantity, matchedOcrLine: aiItem.receipt_text, matchConfidence: `ai-${aiItem.confidence}` as const }
+                                    : i
+                                ));
+                              } else {
+                                // Product matched but not in scanned items - add it
+                                const newItem: ScannedItem = {
+                                  barcode: aiItem.barcode || `AI-${Date.now()}`,
+                                  name: aiItem.parsed_name,
+                                  brand: null,
+                                  category: 'Uncategorized',
+                                  quantity: aiItem.quantity,
+                                  unitCost: aiItem.price.toFixed(2),
+                                  productId: aiItem.product_id || undefined,
+                                  isNew: false,
+                                  matchConfidence: `ai-${aiItem.confidence}` as const,
+                                  matchedOcrLine: aiItem.receipt_text,
+                                };
+                                setItems(prev => [...prev, newItem]);
+                              }
+                              // Save alias if not exists
+                              if (!aliasExists && aiItem.product_id) {
+                                saveAlias(aiItem.receipt_text, aiItem.product_id);
+                              }
+                            }}
+                            disabled={aiItem.accepted}
+                            style={{ flex: 1, padding: '8px 12px', background: aiItem.accepted ? '#d1fae5' : '#22c55e', color: aiItem.accepted ? '#065f46' : '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: aiItem.accepted ? 'default' : 'pointer' }}
+                          >
+                            {aiItem.accepted ? '✓ Accepted' : 'Accept'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setAiParsedItems(prev => prev.map((item, i) =>
+                                i === aiParsedItems.indexOf(aiItem) ? { ...item, skipped: true } : item
+                              ));
+                            }}
+                            disabled={aiItem.accepted || aiItem.skipped}
+                            style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Section 2: New Products Detected (blue) */}
+            {(() => {
+              const newProducts = aiParsedItems.filter(i => i.is_new_product && !i.skipped);
+              return newProducts.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#3b82f6' }}>🆕</span> New Products Detected ({newProducts.length})
+                  </h3>
+                  {newProducts.map((aiItem, idx) => (
+                    <div key={idx} style={{ padding: '12px', background: '#dbeafe', border: '1px solid #3b82f6', borderRadius: '10px', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', marginBottom: '4px' }}>
+                            &quot;{aiItem.receipt_text}&quot;
+                          </div>
+                          {aiItem.suggested_brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#1d4ed8', textTransform: 'uppercase' }}>{aiItem.suggested_brand}</div>}
+                          <div style={{ fontWeight: 600, color: '#1d4ed8' }}>{aiItem.parsed_name}</div>
+                          {aiItem.suggested_category && (
+                            <div style={{ fontSize: '11px', color: '#374151', marginTop: '4px' }}>
+                              Category: {aiItem.suggested_category}
+                            </div>
+                          )}
+                          {aiItem.barcode && (
+                            <div style={{ fontSize: '11px', color: '#374151', marginTop: '4px' }}>
+                              Barcode: <span style={{ fontFamily: 'monospace' }}>{aiItem.barcode}</span>
+                            </div>
+                          )}
+                          {aiItem.reasoning && (
+                            <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '4px', fontStyle: 'italic' }}>
+                              AI: {aiItem.reasoning}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#1d4ed8' }}>${aiItem.price.toFixed(2)}</div>
+                          {aiItem.quantity > 1 && <div style={{ fontSize: '11px', color: '#6b7280' }}>x{aiItem.quantity}</div>}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                        <button
+                          onClick={() => {
+                            setAiParsedItems(prev => prev.map((item, i) =>
+                              i === aiParsedItems.indexOf(aiItem) ? { ...item, skipped: true } : item
+                            ));
+                          }}
+                          style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
+                        >
+                          Skip
+                        </button>
+                        <button
+                          style={{ flex: 1, padding: '8px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+                          onClick={() => {
+                            // Add to scanned items as new product
+                            const newItem: ScannedItem = {
+                              barcode: aiItem.barcode || `NEW-${Date.now()}`,
+                              name: aiItem.parsed_name,
+                              brand: aiItem.suggested_brand,
+                              category: aiItem.suggested_category || 'Uncategorized',
+                              quantity: aiItem.quantity,
+                              unitCost: aiItem.price.toFixed(2),
+                              isNew: true,
+                              matchConfidence: 'ai-high',
+                              matchedOcrLine: aiItem.receipt_text,
+                            };
+                            setItems(prev => [...prev, newItem]);
+                            // Mark as accepted
+                            setAiParsedItems(prev => prev.map((item, i) =>
+                              i === aiParsedItems.indexOf(aiItem) ? { ...item, accepted: true, skipped: false } : item
+                            ));
+                          }}
+                        >
+                          Add to Catalog
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Section 3: Scanned but Not on Receipt */}
+            {(() => {
+              const unmatchedScanned = items.filter(item => {
+                const matchedByAI = aiParsedItems.some(ai => ai.product_id === item.productId && !ai.skipped);
+                return !matchedByAI && !item.unitCost;
+              });
+              return unmatchedScanned.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#dc2626' }}>!</span> Scanned but Not Found on Receipt ({unmatchedScanned.length})
+                  </h3>
+                  {unmatchedScanned.map((item) => (
+                    <div key={item.barcode} style={{ padding: '12px', background: '#fef2f2', border: '1px solid #dc2626', borderRadius: '10px', marginBottom: '8px' }}>
+                      <div style={{ marginBottom: '8px' }}>
                         {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
                         <div style={{ fontWeight: 600 }}>{item.name}</div>
                         <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
-                        {item.matchedOcrLine && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Receipt: &quot;{item.matchedOcrLine}&quot;</div>}
-                        {item.aiReasoning && (
-                          <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '2px', fontStyle: 'italic' }}>
-                            AI: {item.aiReasoning}
-                          </div>
-                        )}
                       </div>
-                      <span style={{ fontSize: '12px', color: labelColor, fontWeight: 600 }}>{label}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>$</span>
-                      <input type="number" step="0.01" value={item.unitCost} onChange={(e) => updatePrice(item.barcode, e.target.value)} className={styles.formInput} style={{ flex: 1 }} />
-                      <span style={{ color: '#6b7280', fontSize: '13px' }}>each</span>
-                    </div>
 
-                    {/* Offer to save alias for AI/fuzzy matches */}
-                    {shouldOfferAlias && (
-                      <div style={{ marginTop: '8px' }}>
-                        <button
-                          onClick={() => item.matchedOcrLine && item.productId && saveAlias(item.matchedOcrLine, item.productId)}
-                          disabled={savingAlias === item.matchedOcrLine}
-                          style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                        >
-                          {savingAlias === item.matchedOcrLine ? 'Saving...' : '+ Remember this match'}
-                        </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>$</span>
+                        <input type="number" step="0.01" value={item.unitCost} onChange={(e) => updatePrice(item.barcode, e.target.value)} placeholder="Enter price manually" className={styles.formInput} style={{ flex: 1, borderColor: '#dc2626' }} />
+                        <span style={{ color: '#6b7280', fontSize: '13px' }}>each</span>
                       </div>
-                    )}
-                    {aliasExists && item.matchConfidence !== 'alias' && (
-                      <div style={{ marginTop: '8px' }}>
-                        <span style={{ fontSize: '11px', color: '#16a34a' }}>✓ Alias saved</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {items.filter(i => i.matchConfidence !== 'none').length === 0 && (
-                <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px', color: '#6b7280', textAlign: 'center' }}>
-                  No automatic matches found
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-
-            {/* Section 2: Unmatched Receipt Lines */}
-            {unmatchedOcrItems.length > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ color: '#f59e0b' }}>?</span> On Receipt But Not Scanned ({unmatchedOcrItems.length})
-                </h3>
-                {unmatchedOcrItems.map((ocrItem, idx) => (
-                  <div key={idx} style={{ padding: '12px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '10px', marginBottom: '8px' }}>
-                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{ocrItem.description}</div>
-                    <div style={{ fontSize: '13px', color: '#92400e' }}>${ocrItem.price.toFixed(2)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Section 3: Unpriced Scanned Items - Can manually match */}
-            {unpricedItems.length > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ color: '#dc2626' }}>!</span> No Price Found ({unpricedItems.length})
-                </h3>
-                {unpricedItems.map((item) => (
-                  <div key={item.barcode} style={{ padding: '12px', background: '#fef2f2', border: '1px solid #dc2626', borderRadius: '10px', marginBottom: '8px' }}>
-                    <div style={{ marginBottom: '8px' }}>
-                      {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
-                      <div style={{ fontWeight: 600 }}>{item.name}</div>
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
-                    </div>
-
-                    {/* Manual OCR line selection */}
-                    {unmatchedOcrItems.length > 0 && (
-                      <div style={{ marginBottom: '8px' }}>
-                        <select
-                          className={styles.formSelect}
-                          style={{ fontSize: '12px', padding: '8px' }}
-                          onChange={(e) => {
-                            const idx = parseInt(e.target.value);
-                            if (idx >= 0 && unmatchedOcrItems[idx]) {
-                              const ocrItem = unmatchedOcrItems[idx];
-                              updatePrice(item.barcode, ocrItem.price.toFixed(2));
-                              // Update match info
-                              setItems(prev => prev.map(i =>
-                                i.barcode === item.barcode
-                                  ? { ...i, matchedOcrLine: ocrItem.description, matchConfidence: 'medium' as const, unitCost: ocrItem.price.toFixed(2) }
-                                  : i
-                              ));
-                              // Mark OCR item as matched
-                              setOcrItems(prev => prev.map((o, i) =>
-                                o.description === ocrItem.description ? { ...o, matched: true } : o
-                              ));
-                            }
-                          }}
-                          defaultValue=""
-                        >
-                          <option value="" disabled>Match to receipt line...</option>
-                          {unmatchedOcrItems.map((ocr, idx) => (
-                            <option key={idx} value={idx}>
-                              {ocr.description} — ${ocr.price.toFixed(2)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>$</span>
-                      <input type="number" step="0.01" value={item.unitCost} onChange={(e) => updatePrice(item.barcode, e.target.value)} placeholder="Enter price" className={styles.formInput} style={{ flex: 1, borderColor: '#dc2626' }} />
-                      <span style={{ color: '#6b7280', fontSize: '13px' }}>each</span>
-                    </div>
-
-                    {/* Remember this match button - appears after user manually matches */}
-                    {item.matchedOcrLine && item.productId && (
-                      <div style={{ marginTop: '8px' }}>
-                        {aliases.some(a => a.receipt_text.toUpperCase() === item.matchedOcrLine?.toUpperCase() && a.product_id === item.productId) ? (
-                          <span style={{ fontSize: '11px', color: '#16a34a' }}>✓ Alias saved</span>
-                        ) : (
-                          <button
-                            onClick={() => item.matchedOcrLine && item.productId && saveAlias(item.matchedOcrLine, item.productId)}
-                            disabled={savingAlias === item.matchedOcrLine}
-                            style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                          >
-                            {savingAlias === item.matchedOcrLine ? 'Saving...' : 'Remember this match'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+              );
+            })()}
 
             {/* Section 4: Totals Check */}
-            {receiptTotalNum > 0 && (
+            {(aiTotal || receiptTotalNum > 0) && (
               <div style={{ padding: '16px', background: difference < 1 ? '#f0fdf4' : '#fef3c7', border: `1px solid ${difference < 1 ? '#22c55e' : '#f59e0b'}`, borderRadius: '10px', marginBottom: '24px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Totals Check</h3>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -1076,20 +845,6 @@ export default function ReceiveItemsPage() {
                 <input type="number" step="0.01" value={receiptTotal} onChange={(e) => setReceiptTotal(e.target.value)} placeholder="0.00" className={styles.formInput} style={{ fontSize: '20px', fontWeight: 700 }} />
               </div>
             </div>
-
-            {/* Debug: Raw OCR Text */}
-            {ocrRawText && (
-              <div style={{ marginBottom: '16px' }}>
-                <button onClick={() => setShowDebugText(!showDebugText)} style={{ fontSize: '12px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                  {showDebugText ? 'Hide' : 'Show'} Raw OCR Text
-                </button>
-                {showDebugText && (
-                  <pre style={{ marginTop: '8px', padding: '12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '200px', overflow: 'auto' }}>
-                    {ocrRawText}
-                  </pre>
-                )}
-              </div>
-            )}
 
             {/* Navigation */}
             <div style={{ display: 'flex', gap: '12px' }}>
