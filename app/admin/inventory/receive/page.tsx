@@ -10,6 +10,7 @@ import styles from '../inventory.module.css';
 interface ScannedItem {
   barcode: string;
   name: string;
+  brand: string | null;
   category: string;
   quantity: number;
   unitCost: string;
@@ -58,10 +59,11 @@ export default function ReceiveItemsPage() {
     }
   }
 
-  function handleLookupResult(result: { found: boolean; source: string; product: { barcode: string; name: string; category: string }; existingProduct?: { id: string } }) {
+  function handleLookupResult(result: { found: boolean; source: string; product: { barcode: string; name: string; brand: string | null; category: string }; existingProduct?: { id: string } }) {
     const newItem: ScannedItem = {
       barcode: result.product.barcode,
       name: result.product.name,
+      brand: result.product.brand,
       category: result.product.category,
       quantity: 1,
       unitCost: '',
@@ -175,6 +177,7 @@ export default function ReceiveItemsPage() {
               data: {
                 barcode: item.barcode,
                 name: item.name,
+                brand: item.brand,
                 category: item.category,
                 default_price: item.unitCost ? parseFloat(item.unitCost) : null,
               },
@@ -321,6 +324,9 @@ export default function ReceiveItemsPage() {
                         marginBottom: '8px',
                       }}>
                         <div style={{ flex: 1 }}>
+                          {item.brand && (
+                            <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.brand}</div>
+                          )}
                           <div style={{ fontWeight: 600, fontSize: '14px' }}>{item.name}</div>
                           <div style={{ fontSize: '12px', color: '#6b7280' }}>{item.barcode}</div>
                         </div>
@@ -391,6 +397,9 @@ export default function ReceiveItemsPage() {
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <div>
+                        {item.brand && (
+                          <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.brand}</div>
+                        )}
                         <div style={{ fontWeight: 600, fontSize: '14px' }}>{item.name}</div>
                         <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
                       </div>

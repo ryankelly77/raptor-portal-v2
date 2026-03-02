@@ -145,7 +145,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
   // Inventory tables
   products: {
     allowedFields: [
-      'barcode', 'name', 'category', 'default_price', 'image_url', 'is_active',
+      'barcode', 'name', 'brand', 'category', 'default_price', 'image_url', 'is_active',
     ],
     requiredForCreate: ['barcode', 'name', 'category'],
     orderBy: { column: 'name', ascending: true },

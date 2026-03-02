@@ -7,6 +7,7 @@ interface Product {
   id: string;
   barcode: string;
   name: string;
+  brand: string | null;
   category: 'snack' | 'beverage' | 'meal';
   default_price: number | null;
   image_url: string | null;
@@ -19,6 +20,7 @@ interface LookupResult {
   product: {
     barcode: string;
     name: string;
+    brand: string | null;
     category: 'snack' | 'beverage' | 'meal';
     image_url: string | null;
     default_price: number | null;
@@ -40,11 +42,119 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
+// Common brands to detect and extract from product names
+const KNOWN_BRANDS = [
+  'Black Rifle',
+  'Monster',
+  'Red Bull',
+  'Celsius',
+  'Prime',
+  'Gatorade',
+  'Powerade',
+  'Coca-Cola',
+  'Pepsi',
+  'Dr Pepper',
+  'Mountain Dew',
+  'Sprite',
+  'Fanta',
+  'Cheetos',
+  'Doritos',
+  'Lays',
+  'Pringles',
+  'Oreo',
+  'Snickers',
+  'M&M',
+  'Reese',
+  'Kit Kat',
+  'Twix',
+  'Skittles',
+  'Starburst',
+  'Takis',
+  'Hot Cheetos',
+  'Smartfood',
+  'SunChips',
+  'Ruffles',
+  'Tostitos',
+  'Fritos',
+  'Funyuns',
+  'Hostess',
+  'Little Debbie',
+  'Kellogg',
+  'General Mills',
+  'Quaker',
+  'Nature Valley',
+  'KIND',
+  'RXBAR',
+  'Clif',
+  'Quest',
+  'Premier Protein',
+  'Muscle Milk',
+  'Fairlife',
+  'Core Power',
+  'Reign',
+  'Bang',
+  'Ghost',
+  'C4',
+  'Alani Nu',
+  '3D Energy',
+  'ZOA',
+  'Rockstar',
+  'NOS',
+  'Full Throttle',
+  'Amp',
+  'Starbucks',
+  'Dunkin',
+  'International Delight',
+  'Coffee Mate',
+  'Nestle',
+  'Hershey',
+  "Jack Link's",
+  'Slim Jim',
+  'Duke',
+  'Oberto',
+  'Tillamook',
+  'Old Wisconsin',
+  'Combos',
+  'Goldfish',
+  'Cheez-It',
+  'Wheat Thins',
+  'Triscuit',
+  'Ritz',
+  'Nabisco',
+  'Keebler',
+  'Famous Amos',
+  'Chips Ahoy',
+  'Nutter Butter',
+  'Belvita',
+  'Pop-Tarts',
+  'Nutri-Grain',
+  'Special K',
+  'Fiber One',
+];
+
+// Extract brand from product name if it starts with a known brand
+function extractBrandFromName(fullName: string): { brand: string | null; name: string } {
+  const nameLower = fullName.toLowerCase();
+
+  for (const brand of KNOWN_BRANDS) {
+    const brandLower = brand.toLowerCase();
+    if (nameLower.startsWith(brandLower + ' ') || nameLower.startsWith(brandLower + "'")) {
+      return {
+        brand,
+        name: fullName.slice(brand.length).trim().replace(/^['-]\s*/, '').trim(),
+      };
+    }
+  }
+
+  return { brand: null, name: fullName };
+}
+
 export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupProps) {
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({
+    brand: '',
     name: '',
     category: 'snack' as 'snack' | 'beverage' | 'meal',
     image_url: '',
@@ -78,6 +188,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
           product: {
             barcode: existingProduct.barcode,
             name: existingProduct.name,
+            brand: existingProduct.brand,
             category: existingProduct.category,
             image_url: existingProduct.image_url,
             default_price: existingProduct.default_price,
@@ -98,10 +209,34 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
         if (offData.status === 1 && offData.product) {
           const p = offData.product;
 
+          // Extract brand from API response
+          let apiBrand = p.brands || '';
+          // Clean up brand - take first brand if comma-separated
+          if (apiBrand.includes(',')) {
+            apiBrand = apiBrand.split(',')[0].trim();
+          }
+
+          // Get product name
+          let productName = p.product_name || p.product_name_en || 'Unknown Product';
+
+          // If no brand from API, try to extract from name
+          if (!apiBrand && productName) {
+            const extracted = extractBrandFromName(productName);
+            apiBrand = extracted.brand || '';
+            productName = extracted.name;
+          } else if (apiBrand && productName) {
+            // If brand exists, check if it's duplicated in the name and remove it
+            const brandLower = apiBrand.toLowerCase();
+            const nameLower = productName.toLowerCase();
+            if (nameLower.startsWith(brandLower + ' ') || nameLower.startsWith(brandLower + "'")) {
+              productName = productName.slice(apiBrand.length).trim().replace(/^['-]\s*/, '').trim();
+            }
+          }
+
           // Try to determine category from Open Food Facts categories
           let category: 'snack' | 'beverage' | 'meal' = 'snack';
           const categories = (p.categories_tags || []).join(' ').toLowerCase();
-          const productName = (p.product_name || '').toLowerCase();
+          const fullName = (productName || '').toLowerCase();
 
           if (
             categories.includes('beverage') ||
@@ -109,11 +244,13 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             categories.includes('water') ||
             categories.includes('soda') ||
             categories.includes('juice') ||
-            productName.includes('water') ||
-            productName.includes('soda') ||
-            productName.includes('juice') ||
-            productName.includes('tea') ||
-            productName.includes('coffee')
+            categories.includes('energy') ||
+            fullName.includes('water') ||
+            fullName.includes('soda') ||
+            fullName.includes('juice') ||
+            fullName.includes('tea') ||
+            fullName.includes('coffee') ||
+            fullName.includes('energy')
           ) {
             category = 'beverage';
           } else if (
@@ -130,7 +267,8 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             source: 'openfoodfacts',
             product: {
               barcode,
-              name: p.product_name || p.product_name_en || 'Unknown Product',
+              name: productName,
+              brand: apiBrand || null,
               category,
               image_url: p.image_front_small_url || p.image_url || null,
               default_price: null,
@@ -139,6 +277,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
 
           setResult(lookupResult);
           setFormData({
+            brand: lookupResult.product.brand || '',
             name: lookupResult.product.name,
             category: lookupResult.product.category,
             image_url: lookupResult.product.image_url || '',
@@ -159,6 +298,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
         product: {
           barcode,
           name: '',
+          brand: null,
           category: 'snack',
           image_url: null,
           default_price: null,
@@ -166,6 +306,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
       };
       setResult(lookupResult);
       setFormData({
+        brand: '',
         name: '',
         category: 'snack',
         image_url: '',
@@ -197,6 +338,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
       const productData = {
         barcode,
         name: formData.name.trim(),
+        brand: formData.brand.trim() || null,
         category: formData.category,
         image_url: formData.image_url.trim() || null,
         default_price: formData.default_price ? parseFloat(formData.default_price) : null,
@@ -257,6 +399,9 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             )}
           </div>
           <div className={styles.lookupInfo}>
+            {result.product.brand && (
+              <div className={styles.lookupBrand}>{result.product.brand}</div>
+            )}
             <div className={styles.lookupName}>{result.product.name}</div>
             <div className={styles.lookupBarcode}>{result.product.barcode}</div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -297,6 +442,9 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             )}
           </div>
           <div className={styles.lookupInfo}>
+            {result.product.brand && (
+              <div className={styles.lookupBrand}>{result.product.brand}</div>
+            )}
             <div className={styles.lookupName}>{result.product.name}</div>
             <div className={styles.lookupBarcode}>{result.product.barcode}</div>
             <span className={`${styles.categoryBadge} ${styles[result.product.category]}`}>
@@ -315,13 +463,23 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             </p>
           )}
           <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Brand</label>
+            <input
+              type="text"
+              className={styles.formInput}
+              value={formData.brand}
+              onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+              placeholder="Brand name (e.g., Black Rifle, Monster)"
+            />
+          </div>
+          <div className={styles.formGroup}>
             <label className={styles.formLabel}>Name *</label>
             <input
               type="text"
               className={styles.formInput}
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Product name"
+              placeholder="Product name (without brand)"
             />
           </div>
           <div className={styles.formGroup}>

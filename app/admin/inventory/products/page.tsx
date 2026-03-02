@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AdminShell } from '../../components/AdminShell';
 import styles from '../inventory.module.css';
 
@@ -8,6 +8,7 @@ interface Product {
   id: string;
   barcode: string;
   name: string;
+  brand: string | null;
   category: 'snack' | 'beverage' | 'meal';
   default_price: number | null;
   image_url: string | null;
@@ -28,9 +29,11 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'snack' | 'beverage' | 'meal'>('all');
+  const [brandFilter, setBrandFilter] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
+    brand: '',
     name: '',
     barcode: '',
     category: 'snack' as 'snack' | 'beverage' | 'meal',
@@ -60,17 +63,48 @@ export default function ProductsPage() {
     loadProducts();
   }, [loadProducts]);
 
+  // Get unique brands for filter dropdown
+  const uniqueBrands = useMemo(() => {
+    const brands = new Set<string>();
+    products.forEach(p => {
+      if (p.brand) brands.add(p.brand);
+    });
+    return Array.from(brands).sort();
+  }, [products]);
+
   const filteredProducts = products.filter((p) => {
+    // Search in brand, name, and barcode
+    const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.barcode.toLowerCase().includes(searchTerm.toLowerCase());
+      (p.brand?.toLowerCase() || '').includes(searchLower) ||
+      p.name.toLowerCase().includes(searchLower) ||
+      p.barcode.toLowerCase().includes(searchLower);
     const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+    const matchesBrand = brandFilter === 'all' || p.brand === brandFilter;
+    return matchesSearch && matchesCategory && matchesBrand;
   });
+
+  // Group products by brand for display
+  const productsByBrand = useMemo(() => {
+    const grouped: { [brand: string]: Product[] } = {};
+    filteredProducts.forEach(p => {
+      const brand = p.brand || 'Other';
+      if (!grouped[brand]) grouped[brand] = [];
+      grouped[brand].push(p);
+    });
+    // Sort brands alphabetically, with "Other" at the end
+    const sortedBrands = Object.keys(grouped).sort((a, b) => {
+      if (a === 'Other') return 1;
+      if (b === 'Other') return -1;
+      return a.localeCompare(b);
+    });
+    return { grouped, sortedBrands };
+  }, [filteredProducts]);
 
   function openAddModal() {
     setEditingProduct(null);
     setFormData({
+      brand: '',
       name: '',
       barcode: '',
       category: 'snack',
@@ -83,6 +117,7 @@ export default function ProductsPage() {
   function openEditModal(product: Product) {
     setEditingProduct(product);
     setFormData({
+      brand: product.brand || '',
       name: product.name,
       barcode: product.barcode,
       category: product.category,
@@ -101,6 +136,7 @@ export default function ProductsPage() {
     setSaving(true);
     try {
       const payload = {
+        brand: formData.brand.trim() || null,
         name: formData.name.trim(),
         barcode: formData.barcode.trim(),
         category: formData.category,
@@ -142,7 +178,7 @@ export default function ProductsPage() {
   }
 
   async function handleDelete(product: Product) {
-    if (!confirm(`Delete "${product.name}"?`)) return;
+    if (!confirm(`Delete "${product.brand ? product.brand + ' ' : ''}${product.name}"?`)) return;
 
     try {
       await fetch('/api/admin/crud', {
@@ -182,7 +218,7 @@ export default function ProductsPage() {
             <input
               type="text"
               className={styles.searchInput}
-              placeholder="Search by name or barcode..."
+              placeholder="Search by brand, name, or barcode..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -208,6 +244,23 @@ export default function ProductsPage() {
             </button>
           ))}
         </div>
+
+        {/* Brand Filter */}
+        {uniqueBrands.length > 0 && (
+          <div style={{ marginBottom: '16px' }}>
+            <select
+              className={styles.formSelect}
+              value={brandFilter}
+              onChange={(e) => setBrandFilter(e.target.value)}
+              style={{ maxWidth: '200px' }}
+            >
+              <option value="all">All Brands</option>
+              {uniqueBrands.map(brand => (
+                <option key={brand} value={brand}>{brand}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Product Grid */}
         {filteredProducts.length === 0 ? (
@@ -237,6 +290,9 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <div className={styles.productInfo}>
+                  {product.brand && (
+                    <div className={styles.productBrand}>{product.brand}</div>
+                  )}
                   <div className={styles.productName}>{product.name}</div>
                   <div className={styles.productBarcode}>{product.barcode}</div>
                   <div className={styles.productDetails}>
@@ -275,13 +331,23 @@ export default function ProductsPage() {
               </div>
               <div className={styles.modalBody}>
                 <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Brand</label>
+                  <input
+                    type="text"
+                    className={styles.formInput}
+                    value={formData.brand}
+                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                    placeholder="Brand name (e.g., Black Rifle, Monster)"
+                  />
+                </div>
+                <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Name *</label>
                   <input
                     type="text"
                     className={styles.formInput}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Product name"
+                    placeholder="Product name (without brand)"
                   />
                 </div>
                 <div className={styles.formGroup}>

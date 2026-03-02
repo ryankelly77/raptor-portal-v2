@@ -363,6 +363,15 @@
   flex-direction: column;
 }
 
+.productBrand {
+  font-weight: 700;
+  font-size: 13px;
+  color: #FF580F;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
 .productName {
   font-weight: 600;
   font-size: 15px;
@@ -669,6 +678,15 @@
 
 .lookupInfo {
   flex: 1;
+}
+
+.lookupBrand {
+  font-weight: 700;
+  font-size: 12px;
+  color: #FF580F;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
 }
 
 .lookupName {
