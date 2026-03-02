@@ -6,6 +6,9 @@ import { AdminShell } from '../../components/AdminShell';
 import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
+// Force dynamic rendering - required for useSearchParams
+export const dynamic = 'force-dynamic';
+
 interface Product {
   id: string;
   name: string;
