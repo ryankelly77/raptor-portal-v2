@@ -7,7 +7,7 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR01-I';
+const BUILD_VERSION = 'v2024-MAR01-J';
 
 interface Product {
   id: string;
@@ -253,6 +253,15 @@ export default function InventoryPage() {
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             </svg>
             Product Catalog
+          </Link>
+          <Link href="/admin/inventory/aliases" className={styles.actionButton}>
+            <svg className={styles.actionIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 17H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M15 3h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4" />
+              <line x1="12" y1="15" x2="12" y2="21" />
+              <polyline points="9 18 12 21 15 18" />
+            </svg>
+            Receipt Aliases
           </Link>
         </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminShell } from '../../components/AdminShell';
 import { BarcodeScanner } from '../components/BarcodeScanner';
@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-I';
+const BUILD_VERSION = 'v2024-MAR01-J';
 
 interface ErrorInfo {
   message: string;
@@ -27,7 +27,7 @@ interface ScannedItem {
   productId?: string;
   isNew?: boolean;
   image_url?: string | null;
-  matchConfidence?: 'high' | 'medium' | 'none';
+  matchConfidence?: 'alias' | 'high' | 'medium' | 'none';
   matchedOcrLine?: string;
 }
 
@@ -35,6 +35,14 @@ interface ParsedOCRItem {
   description: string;
   price: number;
   matched?: boolean;
+  matchedProductId?: string;
+}
+
+interface ReceiptAlias {
+  id: string;
+  store_name: string | null;
+  receipt_text: string;
+  product_id: string;
 }
 
 // Fuzzy matching: calculate word overlap score
@@ -104,7 +112,63 @@ export default function ReceiveItemsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
 
+  // Alias system
+  const [aliases, setAliases] = useState<ReceiptAlias[]>([]);
+  const [aliasesLoaded, setAliasesLoaded] = useState(false);
+  const [savingAlias, setSavingAlias] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load aliases on mount
+  const loadAliases = useCallback(async () => {
+    try {
+      const res = await adminFetch('/api/admin/crud', {
+        method: 'POST',
+        body: JSON.stringify({ table: 'receipt_aliases', action: 'read' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setAliases(data.data);
+        console.log('[Aliases] Loaded', data.data.length, 'aliases');
+      }
+    } catch (err) {
+      console.error('[Aliases] Load error:', err);
+    } finally {
+      setAliasesLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAliases();
+  }, [loadAliases]);
+
+  // Save a new alias
+  const saveAlias = async (receiptText: string, productId: string) => {
+    setSavingAlias(receiptText);
+    try {
+      const res = await adminFetch('/api/admin/crud', {
+        method: 'POST',
+        body: JSON.stringify({
+          table: 'receipt_aliases',
+          action: 'create',
+          data: {
+            store_name: storeName,
+            receipt_text: receiptText.trim().toUpperCase(),
+            product_id: productId,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setAliases([...aliases, data.data]);
+        console.log('[Alias] Saved:', receiptText, '->', productId);
+      }
+    } catch (err) {
+      console.error('[Alias] Save error:', err);
+    } finally {
+      setSavingAlias(null);
+    }
+  };
 
   // Handle barcode scan
   const handleScan = (barcode: string) => {
@@ -264,17 +328,57 @@ export default function ReceiveItemsPage() {
     }
   };
 
-  // Match OCR items to scanned products
+  // Match OCR items to scanned products - uses ALIAS first, then FUZZY
   const matchOcrToProducts = () => {
-    const ocrItemsCopy = ocrItems.map(item => ({ ...item, matched: false }));
+    const ocrItemsCopy = ocrItems.map(item => ({ ...item, matched: false, matchedProductId: undefined }));
     const updatedItems: ScannedItem[] = items.map(item => ({
       ...item,
       matchConfidence: 'none' as const,
       matchedOcrLine: undefined,
     }));
 
-    // For each scanned item, find best matching OCR item
+    // PHASE 1: Match via aliases (highest priority)
+    // For each OCR item, check if we have an alias for it
+    const storeAliases = aliases.filter(a => !a.store_name || a.store_name === storeName);
+    console.log(`[Match] Checking ${storeAliases.length} aliases for store "${storeName}"`);
+
+    for (let j = 0; j < ocrItemsCopy.length; j++) {
+      if (ocrItemsCopy[j].matched) continue;
+
+      const ocrText = ocrItemsCopy[j].description.toUpperCase().trim();
+
+      // Check each alias
+      for (const alias of storeAliases) {
+        const aliasText = alias.receipt_text.toUpperCase().trim();
+
+        // Check if OCR text contains the alias text or vice versa
+        if (ocrText.includes(aliasText) || aliasText.includes(ocrText)) {
+          // Find the scanned item with this product_id
+          const scannedIdx = updatedItems.findIndex(
+            si => si.productId === alias.product_id && si.matchConfidence === 'none'
+          );
+
+          if (scannedIdx >= 0) {
+            ocrItemsCopy[j].matched = true;
+            ocrItemsCopy[j].matchedProductId = alias.product_id;
+
+            updatedItems[scannedIdx] = {
+              ...updatedItems[scannedIdx],
+              unitCost: ocrItemsCopy[j].price.toFixed(2),
+              matchConfidence: 'alias',
+              matchedOcrLine: ocrItemsCopy[j].description,
+            };
+            console.log(`[Match] ALIAS MATCH: "${updatedItems[scannedIdx].name}" <- "${ocrItemsCopy[j].description}" @ $${ocrItemsCopy[j].price}`);
+            break;
+          }
+        }
+      }
+    }
+
+    // PHASE 2: Fuzzy match for remaining items
     for (let i = 0; i < updatedItems.length; i++) {
+      if (updatedItems[i].matchConfidence !== 'none') continue; // Already matched via alias
+
       const scannedItem = updatedItems[i];
       let bestMatch = -1;
       let bestScore = 0;
@@ -298,10 +402,10 @@ export default function ReceiveItemsPage() {
         updatedItems[i] = {
           ...scannedItem,
           unitCost: ocrItem.price.toFixed(2),
-          matchConfidence: (bestScore >= 0.6 ? 'high' : 'medium') as 'high' | 'medium' | 'none',
+          matchConfidence: (bestScore >= 0.6 ? 'high' : 'medium') as 'high' | 'medium',
           matchedOcrLine: ocrItem.description,
         };
-        console.log(`[Match] MATCHED: "${scannedItem.name}" -> "${ocrItem.description}" @ $${ocrItem.price} (score: ${bestScore.toFixed(2)})`);
+        console.log(`[Match] FUZZY MATCH: "${scannedItem.name}" -> "${ocrItem.description}" @ $${ocrItem.price} (score: ${bestScore.toFixed(2)})`);
       }
     }
 
@@ -696,26 +800,53 @@ export default function ReceiveItemsPage() {
               <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ color: '#22c55e' }}>✓</span> Matched Items ({items.filter(i => i.matchConfidence !== 'none').length})
               </h3>
-              {items.filter(i => i.matchConfidence !== 'none').map((item) => (
-                <div key={item.barcode} style={{ padding: '12px', background: item.matchConfidence === 'high' ? '#f0fdf4' : '#fefce8', border: `1px solid ${item.matchConfidence === 'high' ? '#22c55e' : '#facc15'}`, borderRadius: '10px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div>
-                      {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
-                      <div style={{ fontWeight: 600 }}>{item.name}</div>
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
-                      {item.matchedOcrLine && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Matched: &quot;{item.matchedOcrLine}&quot;</div>}
+              {items.filter(i => i.matchConfidence !== 'none').map((item) => {
+                const bgColor = item.matchConfidence === 'alias' ? '#dbeafe' : item.matchConfidence === 'high' ? '#f0fdf4' : '#fefce8';
+                const borderColor = item.matchConfidence === 'alias' ? '#3b82f6' : item.matchConfidence === 'high' ? '#22c55e' : '#facc15';
+                const labelColor = item.matchConfidence === 'alias' ? '#1d4ed8' : item.matchConfidence === 'high' ? '#16a34a' : '#ca8a04';
+                const label = item.matchConfidence === 'alias' ? '✓ Alias' : item.matchConfidence === 'high' ? '✓ Confident' : '⚠ Check';
+
+                // Check if alias already exists for this match
+                const aliasExists = item.matchedOcrLine && item.productId && aliases.some(
+                  a => a.receipt_text.toUpperCase() === item.matchedOcrLine?.toUpperCase() && a.product_id === item.productId
+                );
+
+                return (
+                  <div key={item.barcode} style={{ padding: '12px', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '10px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div>
+                        {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
+                        <div style={{ fontWeight: 600 }}>{item.name}</div>
+                        <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
+                        {item.matchedOcrLine && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Matched: &quot;{item.matchedOcrLine}&quot;</div>}
+                      </div>
+                      <span style={{ fontSize: '12px', color: labelColor }}>{label}</span>
                     </div>
-                    <span style={{ fontSize: '12px', color: item.matchConfidence === 'high' ? '#16a34a' : '#ca8a04' }}>
-                      {item.matchConfidence === 'high' ? '✓ Confident' : '⚠ Check'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>$</span>
+                      <input type="number" step="0.01" value={item.unitCost} onChange={(e) => updatePrice(item.barcode, e.target.value)} className={styles.formInput} style={{ flex: 1 }} />
+                      <span style={{ color: '#6b7280', fontSize: '13px' }}>each</span>
+                    </div>
+
+                    {/* Offer to save alias for fuzzy matches (medium confidence) */}
+                    {item.matchConfidence === 'medium' && item.matchedOcrLine && item.productId && (
+                      <div style={{ marginTop: '8px' }}>
+                        {aliasExists ? (
+                          <span style={{ fontSize: '11px', color: '#16a34a' }}>✓ Alias saved</span>
+                        ) : (
+                          <button
+                            onClick={() => item.matchedOcrLine && item.productId && saveAlias(item.matchedOcrLine, item.productId)}
+                            disabled={savingAlias === item.matchedOcrLine}
+                            style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                          >
+                            {savingAlias === item.matchedOcrLine ? 'Saving...' : 'Remember this match for future'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>$</span>
-                    <input type="number" step="0.01" value={item.unitCost} onChange={(e) => updatePrice(item.barcode, e.target.value)} className={styles.formInput} style={{ flex: 1 }} />
-                    <span style={{ color: '#6b7280', fontSize: '13px' }}>each</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {items.filter(i => i.matchConfidence !== 'none').length === 0 && (
                 <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px', color: '#6b7280', textAlign: 'center' }}>
                   No automatic matches found
@@ -738,7 +869,7 @@ export default function ReceiveItemsPage() {
               </div>
             )}
 
-            {/* Section 3: Unpriced Scanned Items */}
+            {/* Section 3: Unpriced Scanned Items - Can manually match */}
             {unpricedItems.length > 0 && (
               <div style={{ marginBottom: '24px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -751,11 +882,64 @@ export default function ReceiveItemsPage() {
                       <div style={{ fontWeight: 600 }}>{item.name}</div>
                       <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
                     </div>
+
+                    {/* Manual OCR line selection */}
+                    {unmatchedOcrItems.length > 0 && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <select
+                          className={styles.formSelect}
+                          style={{ fontSize: '12px', padding: '8px' }}
+                          onChange={(e) => {
+                            const idx = parseInt(e.target.value);
+                            if (idx >= 0 && unmatchedOcrItems[idx]) {
+                              const ocrItem = unmatchedOcrItems[idx];
+                              updatePrice(item.barcode, ocrItem.price.toFixed(2));
+                              // Update match info
+                              setItems(prev => prev.map(i =>
+                                i.barcode === item.barcode
+                                  ? { ...i, matchedOcrLine: ocrItem.description, matchConfidence: 'medium' as const, unitCost: ocrItem.price.toFixed(2) }
+                                  : i
+                              ));
+                              // Mark OCR item as matched
+                              setOcrItems(prev => prev.map((o, i) =>
+                                o.description === ocrItem.description ? { ...o, matched: true } : o
+                              ));
+                            }
+                          }}
+                          defaultValue=""
+                        >
+                          <option value="" disabled>Match to receipt line...</option>
+                          {unmatchedOcrItems.map((ocr, idx) => (
+                            <option key={idx} value={idx}>
+                              {ocr.description} — ${ocr.price.toFixed(2)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span>$</span>
                       <input type="number" step="0.01" value={item.unitCost} onChange={(e) => updatePrice(item.barcode, e.target.value)} placeholder="Enter price" className={styles.formInput} style={{ flex: 1, borderColor: '#dc2626' }} />
                       <span style={{ color: '#6b7280', fontSize: '13px' }}>each</span>
                     </div>
+
+                    {/* Remember this match button - appears after user manually matches */}
+                    {item.matchedOcrLine && item.productId && (
+                      <div style={{ marginTop: '8px' }}>
+                        {aliases.some(a => a.receipt_text.toUpperCase() === item.matchedOcrLine?.toUpperCase() && a.product_id === item.productId) ? (
+                          <span style={{ fontSize: '11px', color: '#16a34a' }}>✓ Alias saved</span>
+                        ) : (
+                          <button
+                            onClick={() => item.matchedOcrLine && item.productId && saveAlias(item.matchedOcrLine, item.productId)}
+                            disabled={savingAlias === item.matchedOcrLine}
+                            style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                          >
+                            {savingAlias === item.matchedOcrLine ? 'Saving...' : 'Remember this match'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

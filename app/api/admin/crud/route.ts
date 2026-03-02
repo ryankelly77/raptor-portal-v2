@@ -180,6 +180,13 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
     requiredForCreate: ['location_id'],
     orderBy: { column: 'created_at', ascending: false },
   },
+  receipt_aliases: {
+    allowedFields: [
+      'store_name', 'receipt_text', 'product_id',
+    ],
+    requiredForCreate: ['receipt_text', 'product_id'],
+    orderBy: { column: 'receipt_text', ascending: true },
+  },
 };
 
 // Generate random token for projects
