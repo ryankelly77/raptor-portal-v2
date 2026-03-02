@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-L';
+const BUILD_VERSION = 'v2024-MAR02-M';
 
 interface ErrorInfo {
   message: string;
@@ -677,12 +677,12 @@ export default function ReceiveItemsPage() {
           }),
         });
 
+        const purchaseItemData = await purchaseItemRes.json();
         let purchaseItemId: string | null = null;
         if (!purchaseItemRes.ok) {
-          const errData = await purchaseItemRes.json();
-          console.error('[Receive] Failed to create purchase item:', errData);
+          alert(`PURCHASE ITEM FAILED: ${purchaseItemData.error || JSON.stringify(purchaseItemData)}`);
+          throw new Error(`Purchase item failed: ${purchaseItemData.error}`);
         } else {
-          const purchaseItemData = await purchaseItemRes.json();
           purchaseItemId = purchaseItemData.data?.id || null;
         }
 
