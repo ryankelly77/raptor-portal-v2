@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-N';
+const BUILD_VERSION = 'v2024-MAR01-P';
 
 interface ErrorInfo {
   message: string;
