@@ -36,11 +36,15 @@
 }
 
 .sidebarNav {
-  flex: 1;
+  flex: 1 1 auto;
   padding: 16px 0;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0; /* Needed for flex overflow to work */
   -webkit-overflow-scrolling: touch;
+  /* Safari fix: ensure all nav items are visible */
+  display: flex;
+  flex-direction: column;
 }
 
 .navItem {

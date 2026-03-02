@@ -91,7 +91,9 @@ function findBrandMatch(incomingBrand: string, existingBrands: BrandWithCount[])
   matchType: 'exact' | 'contains' | 'similar' | 'none';
   suggestions: string[];
 } {
-  if (!incomingBrand) return { match: null, matchType: 'none', suggestions: [] };
+  if (!incomingBrand || existingBrands.length === 0) {
+    return { match: null, matchType: 'none', suggestions: [] };
+  }
 
   const incomingLower = incomingBrand.toLowerCase().trim();
   const incomingWords = incomingLower.split(/\s+/);
@@ -120,17 +122,19 @@ function findBrandMatch(incomingBrand: string, existingBrands: BrandWithCount[])
 
   // Similar start (first word matches)
   const firstWord = incomingWords[0];
-  const similarMatches = existingBrands.filter(b => {
-    const existingWords = b.brand.toLowerCase().split(/\s+/);
-    return existingWords[0] === firstWord;
-  });
+  if (firstWord && firstWord.length > 2) {
+    const similarMatches = existingBrands.filter(b => {
+      const existingWords = b.brand.toLowerCase().split(/\s+/);
+      return existingWords[0] === firstWord;
+    });
 
-  if (similarMatches.length > 0) {
-    return {
-      match: null,
-      matchType: 'similar',
-      suggestions: similarMatches.map(m => m.brand),
-    };
+    if (similarMatches.length > 0) {
+      return {
+        match: null,
+        matchType: 'similar',
+        suggestions: similarMatches.map(m => m.brand),
+      };
+    }
   }
 
   return { match: null, matchType: 'none', suggestions: [] };
@@ -157,60 +161,38 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
   });
   const [saving, setSaving] = useState(false);
 
-  // Fetch existing brands on mount
-  useEffect(() => {
-    async function fetchBrands() {
-      try {
-        const res = await fetch('/api/admin/crud', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ table: 'products', action: 'read' }),
-        });
-        const data = await res.json();
-        const products: Product[] = data.data || [];
-
-        // Count products per brand
-        const brandCounts: Record<string, number> = {};
-        products.forEach(p => {
-          if (p.brand) {
-            brandCounts[p.brand] = (brandCounts[p.brand] || 0) + 1;
-          }
-        });
-
-        // Convert to array and sort by count descending
-        const brandsWithCount: BrandWithCount[] = Object.entries(brandCounts)
-          .map(([brand, count]) => ({ brand, count }))
-          .sort((a, b) => b.count - a.count);
-
-        setExistingBrands(brandsWithCount);
-      } catch (err) {
-        console.error('Error fetching brands:', err);
-      }
-    }
-    fetchBrands();
-  }, []);
-
   const lookupBarcode = useCallback(async () => {
     setLoading(true);
     setResult(null);
     setBrandMatch(null);
 
     try {
-      // Step 1: Check database first
-      const dbRes = await fetch('/api/admin/crud', {
+      // Step 1: Fetch all products to get existing brands AND check for barcode match
+      const productsRes = await fetch('/api/admin/crud', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({
-          table: 'products',
-          action: 'read',
-          filters: { barcode },
-        }),
+        body: JSON.stringify({ table: 'products', action: 'read' }),
       });
-      const dbData = await dbRes.json();
+      const productsData = await productsRes.json();
+      const allProducts: Product[] = productsData.data || [];
 
-      if (dbData.data && dbData.data.length > 0) {
-        // Found in database
-        const existingProduct = dbData.data[0] as Product;
+      // Build existing brands list
+      const brandCounts: Record<string, number> = {};
+      allProducts.forEach(p => {
+        if (p.brand) {
+          brandCounts[p.brand] = (brandCounts[p.brand] || 0) + 1;
+        }
+      });
+      const brandsWithCount: BrandWithCount[] = Object.entries(brandCounts)
+        .map(([brand, count]) => ({ brand, count }))
+        .sort((a, b) => b.count - a.count);
+      setExistingBrands(brandsWithCount);
+
+      console.log('[BarcodeLookup] Existing brands:', brandsWithCount.map(b => b.brand));
+
+      // Check if barcode exists in our database
+      const existingProduct = allProducts.find(p => p.barcode === barcode);
+      if (existingProduct) {
         const lookupResult: LookupResult = {
           found: true,
           source: 'database',
@@ -262,14 +244,24 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             }
           }
 
+          console.log('[BarcodeLookup] API brand:', apiBrand, '| Product name:', productName);
+
           // Try to normalize brand against existing brands
           let normalizedBrand = apiBrand;
-          if (apiBrand && existingBrands.length > 0) {
-            const match = findBrandMatch(apiBrand, existingBrands);
-            setBrandMatch({ matchType: match.matchType, suggestions: match.suggestions });
+          let matchResult: { matchType: 'exact' | 'contains' | 'similar' | 'none'; suggestions: string[] } = {
+            matchType: 'none',
+            suggestions: []
+          };
+
+          if (apiBrand && brandsWithCount.length > 0) {
+            const match = findBrandMatch(apiBrand, brandsWithCount);
+            console.log('[BarcodeLookup] Brand match result:', match);
+            matchResult = { matchType: match.matchType, suggestions: match.suggestions };
+            setBrandMatch(matchResult);
 
             if (match.match && (match.matchType === 'exact' || match.matchType === 'contains')) {
               normalizedBrand = match.match;
+              console.log('[BarcodeLookup] Normalized brand to:', normalizedBrand);
             }
           }
 
@@ -317,13 +309,13 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
 
           setResult(lookupResult);
           setFormData({
-            brand: lookupResult.product.brand || '',
-            name: lookupResult.product.name,
-            category: lookupResult.product.category,
+            brand: normalizedBrand || '',
+            name: productName,
+            category: category,
             image_url: lookupResult.product.image_url || '',
             default_price: '',
           });
-          setBrandSearch(lookupResult.product.brand || '');
+          setBrandSearch(normalizedBrand || '');
           onResult(lookupResult);
           setLoading(false);
           return;
@@ -361,13 +353,13 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
     } finally {
       setLoading(false);
     }
-  }, [barcode, onResult, existingBrands]);
+  }, [barcode, onResult]);
 
   useEffect(() => {
-    if (barcode && existingBrands !== null) {
+    if (barcode) {
       lookupBarcode();
     }
-  }, [barcode, lookupBarcode, existingBrands]);
+  }, [barcode, lookupBarcode]);
 
   // Filter brands for dropdown
   const filteredBrands = existingBrands.filter(b =>
@@ -499,12 +491,12 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
                 <img src={result.product.image_url} alt={result.product.name} />
               ) : (
                 <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                  <line x1="12" y1="22.08" x2="12" y2="12" />
-                </svg>
-              </span>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                    <line x1="12" y1="22.08" x2="12" y2="12" />
+                  </svg>
+                </span>
               )}
             </div>
             <div className={styles.lookupInfo}>
@@ -529,11 +521,13 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
               borderRadius: '8px',
               fontSize: '13px',
               color: '#16a34a',
+              display: 'flex',
+              alignItems: 'center',
             }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: '6px', display: 'inline' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: '8px', flexShrink: 0 }}>
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              Matched to existing brand: <strong>{formData.brand}</strong>
+              Matched to existing brand: <strong style={{ marginLeft: '4px' }}>{formData.brand}</strong>
             </div>
           )}
 
