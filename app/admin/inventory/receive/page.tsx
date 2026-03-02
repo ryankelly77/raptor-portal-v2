@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-G';
+const BUILD_VERSION = 'v2024-MAR01-H';
 
 interface ErrorInfo {
   message: string;
@@ -28,55 +28,48 @@ interface ScannedItem {
   isNew?: boolean;
   image_url?: string | null;
   matchConfidence?: 'high' | 'medium' | 'none';
-  matchedOcrIndex?: number;
+  matchedOcrLine?: string;
 }
 
-interface OCRItem {
-  name: string;
-  quantity: number;
-  unitPrice: number | null;
-  totalPrice: number | null;
+interface ParsedOCRItem {
+  description: string;
+  price: number;
   matched?: boolean;
-  matchedBarcode?: string;
-}
-
-interface OCRData {
-  storeName: string | null;
-  date: string | null;
-  subtotal: number | null;
-  tax: number | null;
-  total: number | null;
-  items: OCRItem[];
 }
 
 // Fuzzy matching: calculate word overlap score
-function fuzzyMatch(scannedName: string, scannedBrand: string | null, ocrName: string): number {
+function fuzzyMatch(scannedName: string, scannedBrand: string | null, ocrDescription: string): number {
   const scannedWords = ((scannedBrand || '') + ' ' + scannedName)
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')
     .split(/\s+/)
     .filter(w => w.length > 2);
 
-  const ocrWords = ocrName
+  const ocrWords = ocrDescription
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')
     .split(/\s+/)
-    .filter(w => w.length > 2);
+    .filter(w => w.length > 1); // Allow shorter words for abbreviations
 
   if (scannedWords.length === 0 || ocrWords.length === 0) return 0;
 
   let matchCount = 0;
   for (const sw of scannedWords) {
     for (const ow of ocrWords) {
-      // Check for substring match (handles abbreviations like "BLK" vs "BLACK")
+      // Check for substring match (handles abbreviations like "BLK" vs "BLACK", "MNSTR" vs "MONSTER")
       if (sw.includes(ow) || ow.includes(sw) || sw === ow) {
         matchCount++;
+        break;
+      }
+      // Check for first 3 chars match (BLK vs BLACK)
+      if (sw.length >= 3 && ow.length >= 3 && sw.substring(0, 3) === ow.substring(0, 3)) {
+        matchCount += 0.5;
         break;
       }
     }
   }
 
-  return matchCount / Math.max(scannedWords.length, ocrWords.length);
+  return matchCount / Math.max(scannedWords.length, 1);
 }
 
 export default function ReceiveItemsPage() {
@@ -91,9 +84,17 @@ export default function ReceiveItemsPage() {
 
   // Receipt data
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptUploading, setReceiptUploading] = useState(false);
-  const [ocrProcessing, setOcrProcessing] = useState(false);
-  const [ocrData, setOcrData] = useState<OCRData | null>(null);
+
+  // OCR state
+  const [ocrStatus, setOcrStatus] = useState<string>('');
+  const [ocrProgress, setOcrProgress] = useState<number>(0);
+  const [ocrRawText, setOcrRawText] = useState<string>('');
+  const [ocrItems, setOcrItems] = useState<ParsedOCRItem[]>([]);
+  const [showDebugText, setShowDebugText] = useState(false);
+
+  // Purchase info
   const [storeName, setStoreName] = useState("Sam's");
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
   const [purchasedBy, setPurchasedBy] = useState('Cristian Kelly');
@@ -108,7 +109,6 @@ export default function ReceiveItemsPage() {
   // Handle barcode scan
   const handleScan = (barcode: string) => {
     console.log('[Receive] Scanned barcode:', barcode);
-
     const existing = items.find(i => i.barcode === barcode);
     if (existing) {
       setItems(items.map(i =>
@@ -121,7 +121,6 @@ export default function ReceiveItemsPage() {
 
   // Handle lookup result
   const handleLookupResult = (result: any) => {
-    console.log('[Receive] Lookup result:', result);
     const newItem: ScannedItem = {
       barcode: result.product.barcode,
       name: result.product.name,
@@ -161,28 +160,161 @@ export default function ReceiveItemsPage() {
     setItems(items.filter(i => i.barcode !== barcode));
   };
 
-  // Handle receipt photo capture and OCR
+  // Run CLIENT-SIDE OCR with Tesseract.js
+  const runOCR = async (imageFile: File) => {
+    setOcrStatus('Loading OCR engine...');
+    setOcrProgress(0);
+    setOcrRawText('');
+    setOcrItems([]);
+
+    try {
+      console.log('[OCR] Starting Tesseract...');
+      const Tesseract = (await import('tesseract.js')).default;
+
+      const result = await Tesseract.recognize(imageFile, 'eng', {
+        logger: (info: { status: string; progress: number }) => {
+          console.log('[OCR]', info.status, info.progress);
+          if (info.status === 'recognizing text') {
+            const pct = Math.round(info.progress * 100);
+            setOcrProgress(pct);
+            setOcrStatus(`Reading receipt... ${pct}%`);
+          } else if (info.status === 'loading language traineddata') {
+            setOcrStatus('Loading language data...');
+          }
+        },
+      });
+
+      const rawText = result.data.text;
+      console.log('[OCR] RAW TEXT:', rawText);
+      setOcrRawText(rawText);
+      setOcrStatus('Parsing prices...');
+
+      // Parse the text for prices
+      const lines = rawText.split('\n').filter(l => l.trim());
+      const parsedItems: ParsedOCRItem[] = [];
+      let foundTotal: number | null = null;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Match price patterns: $1.99, 1.99, $ 1.99 at end of line
+        const priceMatch = trimmed.match(/\$?\s?(\d{1,3}\.\d{2})\s*$/);
+        if (priceMatch) {
+          const price = parseFloat(priceMatch[1]);
+          const description = trimmed.replace(priceMatch[0], '').trim();
+
+          // Check if this is a total line
+          if (/total|subtotal|sum/i.test(description) && !foundTotal) {
+            foundTotal = price;
+            console.log('[OCR] Found total:', price);
+          } else if (!/tax|fee|change|cash|card|visa|master|payment|balance|tend/i.test(description)) {
+            // Skip tax, payment method lines, etc.
+            if (description && price > 0 && price < 500) {
+              parsedItems.push({ description, price });
+              console.log('[OCR] Parsed item:', description, '$' + price);
+            }
+          }
+        }
+      }
+
+      console.log('[OCR] Total parsed items:', parsedItems.length);
+      setOcrItems(parsedItems);
+
+      if (foundTotal) {
+        setReceiptTotal(foundTotal.toFixed(2));
+      }
+
+      setOcrStatus(`Found ${parsedItems.length} items`);
+      return { rawText, items: parsedItems, total: foundTotal };
+
+    } catch (err) {
+      console.error('[OCR] FAILED:', err);
+      setOcrStatus('OCR failed. Enter prices manually.');
+      return { rawText: '', items: [], total: null };
+    }
+  };
+
+  // Match OCR items to scanned products
+  const matchOcrToProducts = () => {
+    const ocrItemsCopy = ocrItems.map(item => ({ ...item, matched: false }));
+    const updatedItems: ScannedItem[] = items.map(item => ({
+      ...item,
+      matchConfidence: 'none' as const,
+      matchedOcrLine: undefined,
+    }));
+
+    // For each scanned item, find best matching OCR item
+    for (let i = 0; i < updatedItems.length; i++) {
+      const scannedItem = updatedItems[i];
+      let bestMatch = -1;
+      let bestScore = 0;
+
+      for (let j = 0; j < ocrItemsCopy.length; j++) {
+        if (ocrItemsCopy[j].matched) continue;
+
+        const score = fuzzyMatch(scannedItem.name, scannedItem.brand, ocrItemsCopy[j].description);
+        console.log(`[Match] "${scannedItem.name}" vs "${ocrItemsCopy[j].description}" = ${score.toFixed(2)}`);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = j;
+        }
+      }
+
+      if (bestMatch >= 0 && bestScore >= 0.3) {
+        const ocrItem = ocrItemsCopy[bestMatch];
+        ocrItem.matched = true;
+
+        updatedItems[i] = {
+          ...scannedItem,
+          unitCost: ocrItem.price.toFixed(2),
+          matchConfidence: (bestScore >= 0.6 ? 'high' : 'medium') as 'high' | 'medium' | 'none',
+          matchedOcrLine: ocrItem.description,
+        };
+        console.log(`[Match] MATCHED: "${scannedItem.name}" -> "${ocrItem.description}" @ $${ocrItem.price} (score: ${bestScore.toFixed(2)})`);
+      }
+    }
+
+    setItems(updatedItems);
+    setOcrItems(ocrItemsCopy);
+  };
+
+  // Handle receipt photo capture
   const handleReceiptCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setReceiptFile(file);
+    setError(null);
+
+    // Create preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setReceiptImage(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Run OCR immediately
+    await runOCR(file);
+  };
+
+  // Upload receipt and proceed to reconciliation
+  const handleProceedToReconcile = async () => {
+    if (!receiptFile) {
+      // No receipt, skip to submit
+      setStep('reconcile');
+      return;
+    }
 
     setReceiptUploading(true);
     setError(null);
 
     try {
-      // Create preview immediately
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setReceiptImage(ev.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-
       // Upload to Supabase
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', receiptFile);
       formData.append('folder', 'receipts');
-
-      console.log('[Receive] Uploading receipt...');
 
       const uploadRes = await adminFetch('/api/admin/upload', {
         method: 'POST',
@@ -194,105 +326,23 @@ export default function ReceiveItemsPage() {
         throw new Error(uploadData.error || 'Upload failed');
       }
 
-      const imageUrl = uploadData.url;
-      console.log('[Receive] Receipt uploaded:', imageUrl);
-      setReceiptImage(imageUrl);
+      setReceiptImage(uploadData.url);
 
-      // Run server-side OCR with GPT-4o
-      setOcrProcessing(true);
-      setReceiptUploading(false);
+      // Match OCR items to products
+      matchOcrToProducts();
 
-      console.log('[Receive] Running OCR...');
-      const ocrRes = await adminFetch('/api/admin/receipt-ocr', {
-        method: 'POST',
-        body: JSON.stringify({ imageUrl }),
-      });
-      const ocrResult = await ocrRes.json();
-
-      if (!ocrRes.ok) {
-        console.error('[OCR] Failed:', ocrResult);
-        // Continue without OCR data
-        setOcrData(null);
-      } else if (ocrResult.data) {
-        console.log('[OCR] Success:', ocrResult.data);
-        setOcrData(ocrResult.data);
-
-        // Auto-fill store name and date if extracted
-        if (ocrResult.data.storeName) {
-          const storeNameLower = ocrResult.data.storeName.toLowerCase();
-          if (storeNameLower.includes('sam')) setStoreName("Sam's");
-          else if (storeNameLower.includes('costco')) setStoreName('Costco');
-          else if (storeNameLower.includes('walmart')) setStoreName('Walmart');
-          else if (storeNameLower.includes('amazon')) setStoreName('Amazon');
-          else if (storeNameLower.includes('heb') || storeNameLower.includes('h-e-b')) setStoreName('HEB');
-        }
-        if (ocrResult.data.date) {
-          setPurchaseDate(ocrResult.data.date);
-        }
-        if (ocrResult.data.total) {
-          setReceiptTotal(ocrResult.data.total.toFixed(2));
-        }
-      }
+      setStep('reconcile');
 
     } catch (err: unknown) {
-      console.error('[Receive] Receipt error:', err);
+      console.error('[Receive] Upload error:', err);
       if (err instanceof ApiError || err instanceof AuthError) {
         setError({ message: err.message, endpoint: err.endpoint, status: err.status });
       } else if (err instanceof Error) {
         setError({ message: err.message, endpoint: '/api/admin/upload', status: 0 });
-      } else {
-        setError({ message: 'Unknown error', endpoint: '/api/admin/upload', status: 0 });
       }
     } finally {
       setReceiptUploading(false);
-      setOcrProcessing(false);
     }
-  };
-
-  // Run reconciliation: match OCR items to scanned items
-  const runReconciliation = () => {
-    if (!ocrData || !ocrData.items.length) {
-      // No OCR data, go directly to submit
-      setStep('submit');
-      return;
-    }
-
-    const ocrItems = [...ocrData.items].map(item => ({ ...item, matched: false }));
-    const updatedItems: ScannedItem[] = items.map(item => ({ ...item, matchConfidence: 'none', matchedOcrIndex: undefined }));
-
-    // For each scanned item, find best matching OCR item
-    for (let i = 0; i < updatedItems.length; i++) {
-      const scannedItem = updatedItems[i];
-      let bestMatch = -1;
-      let bestScore = 0;
-
-      for (let j = 0; j < ocrItems.length; j++) {
-        if (ocrItems[j].matched) continue;
-
-        const score = fuzzyMatch(scannedItem.name, scannedItem.brand, ocrItems[j].name);
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = j;
-        }
-      }
-
-      if (bestMatch >= 0 && bestScore > 0.3) {
-        const ocrItem = ocrItems[bestMatch];
-        ocrItem.matched = true;
-        ocrItem.matchedBarcode = scannedItem.barcode;
-
-        updatedItems[i] = {
-          ...scannedItem,
-          unitCost: ocrItem.unitPrice?.toFixed(2) || ocrItem.totalPrice?.toFixed(2) || '',
-          matchConfidence: (bestScore > 0.6 ? 'high' : 'medium') as 'high' | 'medium' | 'none',
-          matchedOcrIndex: bestMatch,
-        };
-      }
-    }
-
-    setItems(updatedItems);
-    setOcrData({ ...ocrData, items: ocrItems });
-    setStep('reconcile');
   };
 
   // Calculate totals
@@ -305,7 +355,7 @@ export default function ReceiveItemsPage() {
   const difference = Math.abs(receiptTotalNum - calculatedTotal);
 
   // Get unmatched OCR items
-  const unmatchedOcrItems = ocrData?.items.filter(item => !item.matched) || [];
+  const unmatchedOcrItems = ocrItems.filter(item => !item.matched);
 
   // Get unpriced scanned items
   const unpricedItems = items.filter(item => !item.unitCost);
@@ -412,8 +462,6 @@ export default function ReceiveItemsPage() {
         setError({ message: err.message, endpoint: err.endpoint, status: err.status });
       } else if (err instanceof Error) {
         setError({ message: err.message, endpoint: '/api/admin/crud', status: 0 });
-      } else {
-        setError({ message: 'Unknown error', endpoint: '/api/admin/crud', status: 0 });
       }
     } finally {
       setSaving(false);
@@ -427,7 +475,7 @@ export default function ReceiveItemsPage() {
       <div className={styles.inventoryPage}>
         {/* Build version */}
         <div style={{ background: '#dbeafe', color: '#1e40af', padding: '6px 12px', borderRadius: '6px', marginBottom: '12px', fontSize: '11px', fontFamily: 'monospace' }}>
-          {BUILD_VERSION} | Step: {step} | Items: {totalItemCount}
+          {BUILD_VERSION} | Step: {step} | Items: {totalItemCount} | OCR: {ocrItems.length} lines
         </div>
 
         {/* Error display */}
@@ -487,34 +535,39 @@ export default function ReceiveItemsPage() {
               <div style={{ marginBottom: '16px' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={receiptImage} alt="Receipt" style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '12px', border: '1px solid #e5e7eb' }} />
-                <button onClick={() => { setReceiptImage(null); setOcrData(null); fileInputRef.current?.click(); }} style={{ width: '100%', marginTop: '8px', padding: '10px', background: '#f3f4f6', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <button onClick={() => { setReceiptImage(null); setReceiptFile(null); setOcrRawText(''); setOcrItems([]); setOcrStatus(''); fileInputRef.current?.click(); }} style={{ width: '100%', marginTop: '8px', padding: '10px', background: '#f3f4f6', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                   Retake Photo
                 </button>
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px', background: '#f9fafb', borderRadius: '12px', border: '2px dashed #d1d5db', marginBottom: '16px' }}>
                 <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptCapture} style={{ display: 'none' }} />
-                <button onClick={() => fileInputRef.current?.click()} disabled={receiptUploading || ocrProcessing} style={{ padding: '16px 32px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '16px', cursor: (receiptUploading || ocrProcessing) ? 'wait' : 'pointer' }}>
-                  {receiptUploading ? 'Uploading...' : ocrProcessing ? 'Processing...' : 'Take Receipt Photo'}
+                <button onClick={() => fileInputRef.current?.click()} style={{ padding: '16px 32px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '16px', cursor: 'pointer' }}>
+                  Take Receipt Photo
                 </button>
               </div>
             )}
 
-            {ocrProcessing && (
-              <div style={{ padding: '16px', background: '#dbeafe', borderRadius: '8px', marginBottom: '16px', textAlign: 'center' }}>
-                <div className={styles.spinner} style={{ margin: '0 auto 8px' }} />
-                Reading receipt with AI...
+            {/* OCR Progress */}
+            {ocrStatus && (
+              <div style={{ padding: '16px', background: '#dbeafe', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  {ocrProgress > 0 && ocrProgress < 100 && <div className={styles.spinner} />}
+                  <span style={{ fontWeight: 600 }}>{ocrStatus}</span>
+                </div>
+                {ocrProgress > 0 && ocrProgress < 100 && (
+                  <div style={{ height: '8px', background: '#bfdbfe', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${ocrProgress}%`, background: '#3b82f6', transition: 'width 0.3s' }} />
+                  </div>
+                )}
               </div>
             )}
 
             {/* OCR Results Preview */}
-            {ocrData && (
+            {ocrItems.length > 0 && (
               <div style={{ padding: '12px', background: '#f0fdf4', border: '1px solid #22c55e', borderRadius: '8px', marginBottom: '16px' }}>
-                <div style={{ fontWeight: 600, color: '#16a34a', marginBottom: '8px' }}>✓ Receipt Parsed</div>
-                <div style={{ fontSize: '13px', color: '#374151' }}>
-                  Found {ocrData.items.length} items
-                  {ocrData.total && ` • Total: $${ocrData.total.toFixed(2)}`}
-                </div>
+                <div style={{ fontWeight: 600, color: '#16a34a', marginBottom: '8px' }}>✓ Found {ocrItems.length} items on receipt</div>
+                {receiptTotal && <div style={{ fontSize: '13px', color: '#374151' }}>Total: ${receiptTotal}</div>}
               </div>
             )}
 
@@ -546,8 +599,8 @@ export default function ReceiveItemsPage() {
 
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={() => setStep('scan')} style={{ flex: 1, padding: '14px', background: '#f3f4f6', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}>Back</button>
-              <button onClick={runReconciliation} style={{ flex: 1, padding: '14px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}>
-                {ocrData ? 'Match Prices' : 'Continue'}
+              <button onClick={handleProceedToReconcile} disabled={receiptUploading} style={{ flex: 1, padding: '14px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: receiptUploading ? 'wait' : 'pointer' }}>
+                {receiptUploading ? 'Uploading...' : 'Match Prices'}
               </button>
             </div>
           </div>
@@ -570,6 +623,7 @@ export default function ReceiveItemsPage() {
                       {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
                       <div style={{ fontWeight: 600 }}>{item.name}</div>
                       <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
+                      {item.matchedOcrLine && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Matched: &quot;{item.matchedOcrLine}&quot;</div>}
                     </div>
                     <span style={{ fontSize: '12px', color: item.matchConfidence === 'high' ? '#16a34a' : '#ca8a04' }}>
                       {item.matchConfidence === 'high' ? '✓ Confident' : '⚠ Check'}
@@ -582,6 +636,11 @@ export default function ReceiveItemsPage() {
                   </div>
                 </div>
               ))}
+              {items.filter(i => i.matchConfidence !== 'none').length === 0 && (
+                <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px', color: '#6b7280', textAlign: 'center' }}>
+                  No automatic matches found
+                </div>
+              )}
             </div>
 
             {/* Section 2: Unmatched Receipt Lines */}
@@ -592,14 +651,8 @@ export default function ReceiveItemsPage() {
                 </h3>
                 {unmatchedOcrItems.map((ocrItem, idx) => (
                   <div key={idx} style={{ padding: '12px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '10px', marginBottom: '8px' }}>
-                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{ocrItem.name}</div>
-                    <div style={{ fontSize: '13px', color: '#92400e' }}>
-                      ${ocrItem.unitPrice?.toFixed(2) || ocrItem.totalPrice?.toFixed(2) || '?.??'}
-                      {ocrItem.quantity > 1 && ` × ${ocrItem.quantity}`}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#78716c', marginTop: '4px' }}>
-                      Scan this item to add it, or ignore if not needed
-                    </div>
+                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{ocrItem.description}</div>
+                    <div style={{ fontSize: '13px', color: '#92400e' }}>${ocrItem.price.toFixed(2)}</div>
                   </div>
                 ))}
               </div>
@@ -629,40 +682,51 @@ export default function ReceiveItemsPage() {
             )}
 
             {/* Section 4: Totals Check */}
-            <div style={{ padding: '16px', background: difference < 1 ? '#f0fdf4' : '#fef3c7', border: `1px solid ${difference < 1 ? '#22c55e' : '#f59e0b'}`, borderRadius: '10px', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Totals Check</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span>Receipt Total:</span>
-                <span style={{ fontWeight: 600 }}>${receiptTotalNum.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span>Items Total:</span>
-                <span style={{ fontWeight: 600 }}>${calculatedTotal.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
-                <span>Difference:</span>
-                <span style={{ fontWeight: 600, color: difference < 1 ? '#16a34a' : '#f59e0b' }}>${difference.toFixed(2)}</span>
-              </div>
-              {difference >= 1 && (
-                <div style={{ fontSize: '12px', color: '#92400e', marginTop: '8px' }}>
-                  ⚠ Totals don&apos;t match. Check for unscanned items or incorrect prices.
+            {receiptTotalNum > 0 && (
+              <div style={{ padding: '16px', background: difference < 1 ? '#f0fdf4' : '#fef3c7', border: `1px solid ${difference < 1 ? '#22c55e' : '#f59e0b'}`, borderRadius: '10px', marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Totals Check</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span>Receipt Total:</span>
+                  <span style={{ fontWeight: 600 }}>${receiptTotalNum.toFixed(2)}</span>
                 </div>
-              )}
-              {difference > 0 && difference < 1 && (
-                <div style={{ fontSize: '12px', color: '#16a34a', marginTop: '8px' }}>
-                  ✓ Difference is likely tax
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span>Items Total:</span>
+                  <span style={{ fontWeight: 600 }}>${calculatedTotal.toFixed(2)}</span>
                 </div>
-              )}
-            </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                  <span>Difference:</span>
+                  <span style={{ fontWeight: 600, color: difference < 1 ? '#16a34a' : '#f59e0b' }}>${difference.toFixed(2)}</span>
+                </div>
+                {difference >= 1 && (
+                  <div style={{ fontSize: '12px', color: '#92400e', marginTop: '8px' }}>
+                    ⚠ Totals don&apos;t match. Check for unscanned items or incorrect prices.
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Receipt Total Input */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>Receipt Total (edit if needed)</label>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>Receipt Total</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '20px' }}>$</span>
-                <input type="number" step="0.01" value={receiptTotal} onChange={(e) => setReceiptTotal(e.target.value)} className={styles.formInput} style={{ fontSize: '20px', fontWeight: 700 }} />
+                <input type="number" step="0.01" value={receiptTotal} onChange={(e) => setReceiptTotal(e.target.value)} placeholder="0.00" className={styles.formInput} style={{ fontSize: '20px', fontWeight: 700 }} />
               </div>
             </div>
+
+            {/* Debug: Raw OCR Text */}
+            {ocrRawText && (
+              <div style={{ marginBottom: '16px' }}>
+                <button onClick={() => setShowDebugText(!showDebugText)} style={{ fontSize: '12px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                  {showDebugText ? 'Hide' : 'Show'} Raw OCR Text
+                </button>
+                {showDebugText && (
+                  <pre style={{ marginTop: '8px', padding: '12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '200px', overflow: 'auto' }}>
+                    {ocrRawText}
+                  </pre>
+                )}
+              </div>
+            )}
 
             {/* Navigation */}
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -702,17 +766,9 @@ export default function ReceiveItemsPage() {
               </div>
             ))}
 
-            {/* Receipt thumbnail */}
-            {receiptImage && (
-              <div style={{ marginTop: '16px', marginBottom: '16px' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={receiptImage} alt="Receipt" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-              </div>
-            )}
-
             {/* Navigation */}
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={() => setStep(ocrData ? 'reconcile' : 'receipt')} style={{ flex: 1, padding: '14px', background: '#f3f4f6', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}>Back</button>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+              <button onClick={() => setStep('reconcile')} style={{ flex: 1, padding: '14px', background: '#f3f4f6', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}>Back</button>
               <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '16px', background: saving ? '#d1d5db' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '16px', cursor: saving ? 'wait' : 'pointer' }}>
                 {saving ? 'Saving...' : 'Submit Purchase'}
               </button>

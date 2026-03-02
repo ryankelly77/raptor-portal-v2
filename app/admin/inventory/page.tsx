@@ -7,7 +7,7 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR01-G';
+const BUILD_VERSION = 'v2024-MAR01-H';
 
 interface Product {
   id: string;
