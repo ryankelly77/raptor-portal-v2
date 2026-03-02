@@ -11,8 +11,9 @@
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.98.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "heic2any": "^0.0.4",
-    "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.3",
     "next": "16.1.6",
     "openai": "^6.25.0",

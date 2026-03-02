@@ -38,7 +38,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState('');
-  const [scannerType, setScannerType] = useState<'native' | 'html5' | null>(null);
+  const [scannerType, setScannerType] = useState<'native' | 'zxing' | null>(null);
   const [showFlash, setShowFlash] = useState(false);
   const [cameraHint, setCameraHint] = useState<string | null>(null);
 
@@ -48,11 +48,9 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   const detectorRef = useRef<BarcodeDetector | null>(null);
   const scanningRef = useRef<boolean>(false);
   const animationRef = useRef<number | null>(null);
-  const html5ScannerRef = useRef<any>(null);
+  const zxingReaderRef = useRef<any>(null);
   const lastScanTimeRef = useRef<number>(0);
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const containerId = 'html5-scanner-container';
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -77,13 +75,13 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
       streamRef.current = null;
     }
 
-    if (html5ScannerRef.current) {
+    if (zxingReaderRef.current) {
       try {
-        html5ScannerRef.current.stop();
+        zxingReaderRef.current.reset();
       } catch (e) {
         // Ignore cleanup errors
       }
-      html5ScannerRef.current = null;
+      zxingReaderRef.current = null;
     }
   }, []);
 
@@ -102,7 +100,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
 
     // Vibrate on success
     if (navigator.vibrate) {
-      navigator.vibrate([100, 50, 100]);
+      navigator.vibrate(200);
     }
 
     // Play beep sound
@@ -201,7 +199,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
         }
       }, 3000);
 
-      // Try Native BarcodeDetector first (Safari 17+, Chrome Android)
+      // Try Native BarcodeDetector first (Chrome Android, Safari 17.2+)
       if (hasBarcodeDetector) {
         try {
           const supportedFormats = await BarcodeDetector.getSupportedFormats();
@@ -213,13 +211,13 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
             console.log('[Scanner] Using Native BarcodeDetector with:', formatsToUse);
             detectorRef.current = new BarcodeDetector({ formats: formatsToUse });
 
-            // Request camera with Safari-compatible settings
+            // Request high resolution camera
             console.log('[Scanner] Requesting camera stream...');
             const stream = await navigator.mediaDevices.getUserMedia({
               video: {
                 facingMode: 'environment',
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 }
               },
               audio: false
             });
@@ -287,44 +285,72 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
             setStatus('error');
             return;
           }
-          // Fall through to html5-qrcode
+          // Fall through to ZXing
         }
       }
 
-      // Fallback to html5-qrcode
-      console.log('[Scanner] Falling back to html5-qrcode');
+      // Fallback to ZXing
+      console.log('[Scanner] Falling back to ZXing');
       try {
-        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
+        const { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } = await import('@zxing/library');
 
         if (!mounted) return;
 
-        const formats = [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.CODE_93,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.CODABAR,
-        ];
+        // Configure for product barcodes with TRY_HARDER mode
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.ITF,
+          BarcodeFormat.CODABAR,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
 
-        // Need to set scannerType first so the container div renders
-        setScannerType('html5');
+        const reader = new BrowserMultiFormatReader(hints);
 
-        // Wait a tick for React to render the container
+        // Set scanner type so video element renders
+        setScannerType('zxing');
+
+        // Wait for React to render
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        const scanner = new Html5Qrcode(containerId, { formatsToSupport: formats, verbose: false });
-        html5ScannerRef.current = scanner;
+        const video = videoRef.current;
+        if (!video || !mounted) return;
 
-        console.log('[Scanner] Starting html5-qrcode...');
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, aspectRatio: 16/9 },
-          (text) => handleDetection(text),
-          () => {}
+        console.log('[Scanner] Starting ZXing with high resolution...');
+
+        // Get list of video devices and select back camera
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        console.log('[Scanner] Available cameras:', videoDevices.length);
+
+        // Prefer back camera - look for 'back', 'rear', or 'environment'
+        let deviceId: string | null = null;
+        for (const device of videoDevices) {
+          const label = device.label.toLowerCase();
+          if (label.includes('back') || label.includes('rear') || label.includes('environment')) {
+            deviceId = device.deviceId;
+            break;
+          }
+        }
+
+        // Store reader reference for cleanup
+        zxingReaderRef.current = reader;
+
+        // Start continuous scanning
+        await reader.decodeFromVideoDevice(
+          deviceId, // null = default camera (usually back on mobile)
+          video,
+          (result, error) => {
+            if (result) {
+              handleDetection(result.getText());
+            }
+            // Errors are normal when no barcode is visible - ignore them
+          }
         );
 
         if (mounted) {
@@ -333,10 +359,10 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
             initTimeoutRef.current = null;
           }
           setStatus('scanning');
-          console.log('[Scanner] html5-qrcode started successfully');
+          console.log('[Scanner] ZXing started successfully');
         }
       } catch (e: any) {
-        console.error('[Scanner] html5-qrcode failed:', e.name, e.message);
+        console.error('[Scanner] ZXing failed:', e.name, e.message);
         if (e.name === 'NotAllowedError' || e.message?.includes('Permission')) {
           setErrorMsg('Camera permission denied. Please allow camera access and refresh.');
         } else {
@@ -388,7 +414,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     <div style={containerStyle}>
       {/* Camera View */}
       <div style={{ flex: 1, position: 'relative', minHeight: fullScreen ? 0 : '300px' }}>
-        {/* Native scanner video - SAFARI FIX: playsInline must be camelCase in JSX */}
+        {/* Video element - used by both native and ZXing */}
         <video
           ref={videoRef}
           autoPlay
@@ -398,20 +424,10 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            display: scannerType === 'native' ? 'block' : 'none',
+            display: scannerType ? 'block' : 'none',
           }}
         />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-        {/* html5-qrcode container */}
-        <div
-          id={containerId}
-          style={{
-            width: '100%',
-            height: '100%',
-            display: scannerType === 'html5' ? 'block' : 'none',
-          }}
-        />
 
         {/* Initializing state */}
         {status === 'initializing' && (
@@ -498,7 +514,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
             }}>
               <div style={{ fontWeight: 600, marginBottom: '4px' }}>Point at barcode</div>
               <div style={{ fontSize: '12px', opacity: 0.8 }}>
-                {scannerType === 'native' ? 'Native API - any angle works' : 'html5-qrcode fallback'}
+                Using: {scannerType === 'native' ? 'Native BarcodeDetector' : 'ZXing Scanner'}
               </div>
             </div>
 
