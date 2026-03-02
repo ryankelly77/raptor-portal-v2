@@ -14,10 +14,11 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Force browsers to revalidate cached pages
+  // Force browsers to revalidate cached pages and assets
   async headers() {
     return [
       {
+        // HTML pages
         source: '/:path*',
         headers: [
           {
@@ -34,7 +35,21 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // Next.js static chunks - short cache to force reload
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=60, must-revalidate',
+          },
+        ],
+      },
     ];
+  },
+  // Generate new build IDs to bust cache
+  generateBuildId: async () => {
+    return `build-${Date.now()}`;
   },
 };
 
