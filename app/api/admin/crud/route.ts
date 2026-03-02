@@ -142,6 +142,44 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
     requiredForCreate: ['action', 'description'],
     orderBy: { column: 'created_at', ascending: false },
   },
+  // Inventory tables
+  products: {
+    allowedFields: [
+      'barcode', 'name', 'category', 'default_price', 'image_url', 'is_active',
+    ],
+    requiredForCreate: ['barcode', 'name', 'category'],
+    orderBy: { column: 'name', ascending: true },
+  },
+  inventory_purchases: {
+    allowedFields: [
+      'purchased_by', 'store_name', 'purchase_date', 'receipt_image_url',
+      'receipt_total', 'status',
+    ],
+    requiredForCreate: ['purchased_by'],
+    orderBy: { column: 'created_at', ascending: false },
+  },
+  inventory_purchase_items: {
+    allowedFields: [
+      'purchase_id', 'product_id', 'quantity', 'unit_cost',
+    ],
+    requiredForCreate: ['purchase_id', 'product_id'],
+    orderBy: { column: 'created_at', ascending: false },
+  },
+  inventory_movements: {
+    allowedFields: [
+      'product_id', 'location_id', 'quantity', 'movement_type', 'reason',
+      'reference_id', 'moved_by', 'notes',
+    ],
+    requiredForCreate: ['product_id', 'quantity', 'movement_type'],
+    orderBy: { column: 'created_at', ascending: false },
+  },
+  sales_imports: {
+    allowedFields: [
+      'location_id', 'file_url', 'import_date', 'records_count', 'status',
+    ],
+    requiredForCreate: ['location_id'],
+    orderBy: { column: 'created_at', ascending: false },
+  },
 };
 
 // Generate random token for projects
