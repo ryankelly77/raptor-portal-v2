@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.98.0",
     "@zxing/browser": "^0.1.5",

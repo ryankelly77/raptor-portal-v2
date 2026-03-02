@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-J';
+const BUILD_VERSION = 'v2024-MAR01-K';
 
 interface ErrorInfo {
   message: string;
@@ -27,8 +27,9 @@ interface ScannedItem {
   productId?: string;
   isNew?: boolean;
   image_url?: string | null;
-  matchConfidence?: 'alias' | 'high' | 'medium' | 'none';
+  matchConfidence?: 'alias' | 'ai-high' | 'ai-medium' | 'ai-low' | 'high' | 'medium' | 'none';
   matchedOcrLine?: string;
+  aiReasoning?: string;
 }
 
 interface ParsedOCRItem {
@@ -36,6 +37,7 @@ interface ParsedOCRItem {
   price: number;
   matched?: boolean;
   matchedProductId?: string;
+  aiReasoning?: string;
 }
 
 interface ReceiptAlias {
@@ -43,6 +45,13 @@ interface ReceiptAlias {
   store_name: string | null;
   receipt_text: string;
   product_id: string;
+}
+
+interface AIMatchResult {
+  receipt_index: number;
+  product_id: string | null;
+  confidence: 'high' | 'medium' | 'low' | 'none';
+  reasoning: string;
 }
 
 // Fuzzy matching: calculate word overlap score
@@ -116,6 +125,10 @@ export default function ReceiveItemsPage() {
   const [aliases, setAliases] = useState<ReceiptAlias[]>([]);
   const [aliasesLoaded, setAliasesLoaded] = useState(false);
   const [savingAlias, setSavingAlias] = useState<string | null>(null);
+
+  // AI matching
+  const [aiMatching, setAiMatching] = useState(false);
+  const [aiMatchStatus, setAiMatchStatus] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -328,17 +341,17 @@ export default function ReceiveItemsPage() {
     }
   };
 
-  // Match OCR items to scanned products - uses ALIAS first, then FUZZY
-  const matchOcrToProducts = () => {
+  // Match OCR items to scanned products - uses ALIAS first, then AI
+  const matchOcrToProducts = async () => {
     const ocrItemsCopy: ParsedOCRItem[] = ocrItems.map(item => ({ ...item, matched: false }));
     const updatedItems: ScannedItem[] = items.map(item => ({
       ...item,
       matchConfidence: 'none' as const,
       matchedOcrLine: undefined,
+      aiReasoning: undefined,
     }));
 
-    // PHASE 1: Match via aliases (highest priority)
-    // For each OCR item, check if we have an alias for it
+    // PHASE 1: Match via aliases (highest priority - free & instant)
     const storeAliases = aliases.filter(a => !a.store_name || a.store_name === storeName);
     console.log(`[Match] Checking ${storeAliases.length} aliases for store "${storeName}"`);
 
@@ -347,13 +360,10 @@ export default function ReceiveItemsPage() {
 
       const ocrText = ocrItemsCopy[j].description.toUpperCase().trim();
 
-      // Check each alias
       for (const alias of storeAliases) {
         const aliasText = alias.receipt_text.toUpperCase().trim();
 
-        // Check if OCR text contains the alias text or vice versa
         if (ocrText.includes(aliasText) || aliasText.includes(ocrText)) {
-          // Find the scanned item with this product_id
           const scannedIdx = updatedItems.findIndex(
             si => si.productId === alias.product_id && si.matchConfidence === 'none'
           );
@@ -375,37 +385,93 @@ export default function ReceiveItemsPage() {
       }
     }
 
-    // PHASE 2: Fuzzy match for remaining items
-    for (let i = 0; i < updatedItems.length; i++) {
-      if (updatedItems[i].matchConfidence !== 'none') continue; // Already matched via alias
+    // PHASE 2: AI matching for remaining unmatched items
+    const unmatchedOcr = ocrItemsCopy.filter(o => !o.matched);
+    const unmatchedProducts = updatedItems.filter(i => i.matchConfidence === 'none' && i.productId);
 
-      const scannedItem = updatedItems[i];
-      let bestMatch = -1;
-      let bestScore = 0;
+    if (unmatchedOcr.length > 0 && unmatchedProducts.length > 0) {
+      setAiMatching(true);
+      setAiMatchStatus('Matching items with AI...');
 
-      for (let j = 0; j < ocrItemsCopy.length; j++) {
-        if (ocrItemsCopy[j].matched) continue;
+      try {
+        // Prepare data for AI
+        const ocrLines = unmatchedOcr.map(o => ({
+          description: o.description,
+          price: o.price
+        }));
 
-        const score = fuzzyMatch(scannedItem.name, scannedItem.brand, ocrItemsCopy[j].description);
-        console.log(`[Match] "${scannedItem.name}" vs "${ocrItemsCopy[j].description}" = ${score.toFixed(2)}`);
+        const products = unmatchedProducts.map(p => ({
+          id: p.productId!,
+          brand: p.brand,
+          name: p.name,
+          category: p.category
+        }));
 
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = j;
+        console.log(`[AI Match] Sending ${ocrLines.length} OCR lines and ${products.length} products`);
+
+        const res = await adminFetch('/api/admin/inventory/match-receipt', {
+          method: 'POST',
+          body: JSON.stringify({
+            ocrLines,
+            products,
+            storeName
+          }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.matches) {
+          console.log('[AI Match] Received', data.matches.length, 'matches');
+
+          // Apply AI matches
+          for (const match of data.matches as AIMatchResult[]) {
+            if (!match.product_id || match.confidence === 'none') continue;
+
+            const ocrItem = unmatchedOcr[match.receipt_index];
+            if (!ocrItem || ocrItem.matched) continue;
+
+            // Find the scanned item with this product_id
+            const scannedIdx = updatedItems.findIndex(
+              si => si.productId === match.product_id && si.matchConfidence === 'none'
+            );
+
+            if (scannedIdx >= 0) {
+              // Find original OCR index
+              const origOcrIdx = ocrItemsCopy.findIndex(o => o.description === ocrItem.description && !o.matched);
+              if (origOcrIdx >= 0) {
+                ocrItemsCopy[origOcrIdx].matched = true;
+                ocrItemsCopy[origOcrIdx].matchedProductId = match.product_id;
+                ocrItemsCopy[origOcrIdx].aiReasoning = match.reasoning;
+              }
+
+              const confidenceMap: Record<string, 'ai-high' | 'ai-medium' | 'ai-low'> = {
+                high: 'ai-high',
+                medium: 'ai-medium',
+                low: 'ai-low'
+              };
+
+              updatedItems[scannedIdx] = {
+                ...updatedItems[scannedIdx],
+                unitCost: ocrItem.price.toFixed(2),
+                matchConfidence: confidenceMap[match.confidence] || 'ai-low',
+                matchedOcrLine: ocrItem.description,
+                aiReasoning: match.reasoning,
+              };
+
+              console.log(`[AI Match] ${match.confidence.toUpperCase()}: "${updatedItems[scannedIdx].name}" <- "${ocrItem.description}" (${match.reasoning})`);
+            }
+          }
+
+          setAiMatchStatus(`AI matched ${data.matches.filter((m: AIMatchResult) => m.product_id && m.confidence !== 'none').length} items`);
+        } else {
+          console.error('[AI Match] Failed:', data.error);
+          setAiMatchStatus('AI matching failed - using manual mode');
         }
-      }
-
-      if (bestMatch >= 0 && bestScore >= 0.3) {
-        const ocrItem = ocrItemsCopy[bestMatch];
-        ocrItem.matched = true;
-
-        updatedItems[i] = {
-          ...scannedItem,
-          unitCost: ocrItem.price.toFixed(2),
-          matchConfidence: (bestScore >= 0.6 ? 'high' : 'medium') as 'high' | 'medium',
-          matchedOcrLine: ocrItem.description,
-        };
-        console.log(`[Match] FUZZY MATCH: "${scannedItem.name}" -> "${ocrItem.description}" @ $${ocrItem.price} (score: ${bestScore.toFixed(2)})`);
+      } catch (err) {
+        console.error('[AI Match] Error:', err);
+        setAiMatchStatus('AI matching error - using manual mode');
+      } finally {
+        setAiMatching(false);
       }
     }
 
@@ -461,8 +527,8 @@ export default function ReceiveItemsPage() {
 
       setReceiptImage(uploadData.url);
 
-      // Match OCR items to products
-      matchOcrToProducts();
+      // Match OCR items to products (alias + AI)
+      await matchOcrToProducts();
 
       setStep('reconcile');
 
@@ -783,8 +849,8 @@ export default function ReceiveItemsPage() {
 
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={() => setStep('scan')} style={{ flex: 1, padding: '14px', background: '#f3f4f6', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}>Back</button>
-              <button onClick={handleProceedToReconcile} disabled={receiptUploading} style={{ flex: 1, padding: '14px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: receiptUploading ? 'wait' : 'pointer' }}>
-                {receiptUploading ? 'Uploading...' : 'Match Prices'}
+              <button onClick={handleProceedToReconcile} disabled={receiptUploading || aiMatching} style={{ flex: 1, padding: '14px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: (receiptUploading || aiMatching) ? 'wait' : 'pointer' }}>
+                {receiptUploading ? 'Uploading...' : aiMatching ? 'AI Matching...' : 'Match with AI'}
               </button>
             </div>
           </div>
@@ -795,21 +861,48 @@ export default function ReceiveItemsPage() {
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '16px' }}>Reconcile Prices</h2>
 
+            {/* AI Matching Status */}
+            {(aiMatching || aiMatchStatus) && (
+              <div style={{ padding: '12px 16px', background: aiMatching ? '#dbeafe' : '#f0fdf4', border: `1px solid ${aiMatching ? '#3b82f6' : '#22c55e'}`, borderRadius: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {aiMatching && <div className={styles.spinner} />}
+                <span style={{ fontWeight: 500, color: aiMatching ? '#1d4ed8' : '#16a34a' }}>
+                  {aiMatchStatus || 'Matching with AI...'}
+                </span>
+              </div>
+            )}
+
             {/* Section 1: Matched Items */}
             <div style={{ marginBottom: '24px' }}>
               <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ color: '#22c55e' }}>✓</span> Matched Items ({items.filter(i => i.matchConfidence !== 'none').length})
               </h3>
               {items.filter(i => i.matchConfidence !== 'none').map((item) => {
-                const bgColor = item.matchConfidence === 'alias' ? '#dbeafe' : item.matchConfidence === 'high' ? '#f0fdf4' : '#fefce8';
-                const borderColor = item.matchConfidence === 'alias' ? '#3b82f6' : item.matchConfidence === 'high' ? '#22c55e' : '#facc15';
-                const labelColor = item.matchConfidence === 'alias' ? '#1d4ed8' : item.matchConfidence === 'high' ? '#16a34a' : '#ca8a04';
-                const label = item.matchConfidence === 'alias' ? '✓ Alias' : item.matchConfidence === 'high' ? '✓ Confident' : '⚠ Check';
+                // Determine colors and labels based on match confidence
+                let bgColor = '#fefce8';
+                let borderColor = '#facc15';
+                let labelColor = '#ca8a04';
+                let label = '⚠ Check';
+
+                if (item.matchConfidence === 'alias') {
+                  bgColor = '#dbeafe'; borderColor = '#3b82f6'; labelColor = '#1d4ed8'; label = '✓ Alias';
+                } else if (item.matchConfidence === 'ai-high') {
+                  bgColor = '#f0fdf4'; borderColor = '#22c55e'; labelColor = '#16a34a'; label = '✓ AI High';
+                } else if (item.matchConfidence === 'ai-medium') {
+                  bgColor = '#fefce8'; borderColor = '#facc15'; labelColor = '#ca8a04'; label = '⚠ AI Medium';
+                } else if (item.matchConfidence === 'ai-low') {
+                  bgColor = '#fef2f2'; borderColor = '#f87171'; labelColor = '#dc2626'; label = '? AI Low';
+                } else if (item.matchConfidence === 'high') {
+                  bgColor = '#f0fdf4'; borderColor = '#22c55e'; labelColor = '#16a34a'; label = '✓ Confident';
+                }
 
                 // Check if alias already exists for this match
                 const aliasExists = item.matchedOcrLine && item.productId && aliases.some(
                   a => a.receipt_text.toUpperCase() === item.matchedOcrLine?.toUpperCase() && a.product_id === item.productId
                 );
+
+                // Should offer to save alias for AI matches
+                const shouldOfferAlias = (item.matchConfidence === 'ai-high' || item.matchConfidence === 'ai-medium' || item.matchConfidence === 'ai-low' || item.matchConfidence === 'medium')
+                  && item.matchedOcrLine && item.productId && !aliasExists;
 
                 return (
                   <div key={item.barcode} style={{ padding: '12px', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '10px', marginBottom: '8px' }}>
@@ -818,9 +911,14 @@ export default function ReceiveItemsPage() {
                         {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
                         <div style={{ fontWeight: 600 }}>{item.name}</div>
                         <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
-                        {item.matchedOcrLine && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Matched: &quot;{item.matchedOcrLine}&quot;</div>}
+                        {item.matchedOcrLine && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Receipt: &quot;{item.matchedOcrLine}&quot;</div>}
+                        {item.aiReasoning && (
+                          <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '2px', fontStyle: 'italic' }}>
+                            AI: {item.aiReasoning}
+                          </div>
+                        )}
                       </div>
-                      <span style={{ fontSize: '12px', color: labelColor }}>{label}</span>
+                      <span style={{ fontSize: '12px', color: labelColor, fontWeight: 600 }}>{label}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span>$</span>
@@ -828,20 +926,21 @@ export default function ReceiveItemsPage() {
                       <span style={{ color: '#6b7280', fontSize: '13px' }}>each</span>
                     </div>
 
-                    {/* Offer to save alias for fuzzy matches (medium confidence) */}
-                    {item.matchConfidence === 'medium' && item.matchedOcrLine && item.productId && (
+                    {/* Offer to save alias for AI/fuzzy matches */}
+                    {shouldOfferAlias && (
                       <div style={{ marginTop: '8px' }}>
-                        {aliasExists ? (
-                          <span style={{ fontSize: '11px', color: '#16a34a' }}>✓ Alias saved</span>
-                        ) : (
-                          <button
-                            onClick={() => item.matchedOcrLine && item.productId && saveAlias(item.matchedOcrLine, item.productId)}
-                            disabled={savingAlias === item.matchedOcrLine}
-                            style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                          >
-                            {savingAlias === item.matchedOcrLine ? 'Saving...' : 'Remember this match for future'}
-                          </button>
-                        )}
+                        <button
+                          onClick={() => item.matchedOcrLine && item.productId && saveAlias(item.matchedOcrLine, item.productId)}
+                          disabled={savingAlias === item.matchedOcrLine}
+                          style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                        >
+                          {savingAlias === item.matchedOcrLine ? 'Saving...' : '+ Remember this match'}
+                        </button>
+                      </div>
+                    )}
+                    {aliasExists && item.matchConfidence !== 'alias' && (
+                      <div style={{ marginTop: '8px' }}>
+                        <span style={{ fontSize: '11px', color: '#16a34a' }}>✓ Alias saved</span>
                       </div>
                     )}
                   </div>
