@@ -186,7 +186,12 @@ export function BrandNormalizer({ onClose, onComplete }: BrandNormalizerProps) {
         <div className={styles.modalBody}>
           {groups.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
+              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', color: '#16a34a' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+              </div>
               <p style={{ fontSize: '16px', fontWeight: 500 }}>All brands are normalized!</p>
               <p style={{ fontSize: '14px', marginTop: '8px' }}>No similar brand names were found that need merging.</p>
             </div>

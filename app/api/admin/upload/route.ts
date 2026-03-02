@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/jwt';
 import { getAdminClient } from '@/lib/supabase/admin';
 
-interface UploadRequest {
-  bucket: string;
-  filePath: string;
-  fileData: string; // base64
-  contentType?: string;
-}
-
 export async function POST(request: NextRequest) {
   // Admin authentication
   const auth = requireAdmin(request);
@@ -25,33 +18,70 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Database service not configured' }, { status: 500 });
   }
 
-  let body: UploadRequest;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
-
-  const { bucket, filePath, fileData, contentType } = body;
-
-  if (!bucket || !filePath || !fileData) {
-    return NextResponse.json({ error: 'Missing required fields: bucket, filePath, fileData' }, { status: 400 });
-  }
+  const contentType = request.headers.get('content-type') || '';
 
   try {
-    // Convert base64 to buffer
-    const fileBuffer = Buffer.from(fileData, 'base64');
+    let bucket: string;
+    let filePath: string;
+    let fileBuffer: Buffer;
+    let mimeType: string;
+
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData upload
+      const formData = await request.formData();
+      const file = formData.get('file') as File | null;
+      const folder = formData.get('folder') as string || 'uploads';
+
+      if (!file) {
+        return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      }
+
+      // Determine bucket based on folder
+      bucket = 'inventory'; // Default bucket for inventory-related uploads
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(2, 8);
+      const ext = file.name.split('.').pop() || 'jpg';
+      filePath = `${folder}/${timestamp}-${randomStr}.${ext}`;
+
+      // Convert file to buffer
+      const arrayBuffer = await file.arrayBuffer();
+      fileBuffer = Buffer.from(arrayBuffer);
+      mimeType = file.type || 'image/jpeg';
+
+    } else {
+      // Handle JSON upload (legacy base64 format)
+      const body = await request.json();
+      const { bucket: reqBucket, filePath: reqPath, fileData, contentType: reqContentType } = body;
+
+      if (!reqBucket || !reqPath || !fileData) {
+        return NextResponse.json({ error: 'Missing required fields: bucket, filePath, fileData' }, { status: 400 });
+      }
+
+      bucket = reqBucket;
+      filePath = reqPath;
+      fileBuffer = Buffer.from(fileData, 'base64');
+      mimeType = reqContentType || 'application/octet-stream';
+    }
 
     // Upload to storage
     const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(filePath, fileBuffer, {
         upsert: true,
-        contentType: contentType || 'application/octet-stream',
+        contentType: mimeType,
       });
 
     if (uploadError) {
       console.error('Storage upload error:', uploadError);
+      // Check if bucket doesn't exist
+      if (uploadError.message.includes('not found') || uploadError.message.includes('does not exist')) {
+        return NextResponse.json({
+          error: `Storage bucket "${bucket}" not found. Please create it in Supabase Storage.`,
+          hint: 'Go to Supabase > Storage > New bucket > Name: inventory > Public bucket: Yes'
+        }, { status: 500 });
+      }
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
@@ -62,7 +92,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      publicUrl: urlData.publicUrl,
+      url: urlData.publicUrl,
+      publicUrl: urlData.publicUrl, // Include both for compatibility
     });
   } catch (error) {
     console.error('Upload error:', error);

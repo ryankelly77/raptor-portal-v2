@@ -349,7 +349,10 @@ export default function ReceiveItemsPage() {
                           onClick={() => removeItem(item.barcode)}
                           style={{ color: '#dc2626', background: 'none', border: 'none', padding: '8px', cursor: 'pointer' }}
                         >
-                          ✕
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
                         </button>
                       </div>
                     ))}
@@ -480,7 +483,15 @@ export default function ReceiveItemsPage() {
                     disabled={receiptUploading}
                     style={{ width: '100%' }}
                   >
-                    {receiptUploading ? 'Uploading...' : '📷 Take Photo'}
+                    {receiptUploading ? 'Uploading...' : (
+                      <>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', verticalAlign: 'middle' }}>
+                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                          <circle cx="12" cy="13" r="4" />
+                        </svg>
+                        Take Photo
+                      </>
+                    )}
                   </button>
 
                   <p style={{ color: '#6b7280', fontSize: '13px', marginTop: '16px' }}>
