@@ -8,6 +8,20 @@ interface Product {
   name: string;
   barcode: string;
   category: string;
+  units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
+}
+
+interface ScannedItem {
+  product_id?: string;
+  barcode: string;
+  name: string;
+  brand: string | null;
+  quantity: number;
+  units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
 }
 
 interface ParsedItem {
@@ -72,6 +86,7 @@ export async function POST(request: NextRequest) {
   let body: {
     imageUrl: string;
     products: Product[];
+    scannedItems?: ScannedItem[];
     storeName?: string; // Optional hint, AI will detect from receipt
   };
 
@@ -81,7 +96,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { imageUrl, products } = body;
+  const { imageUrl, products, scannedItems = [] } = body;
 
   if (!imageUrl || typeof imageUrl !== 'string') {
     return NextResponse.json({ error: 'imageUrl is required' }, { status: 400 });
@@ -96,11 +111,28 @@ export async function POST(request: NextRequest) {
       apiKey: anthropicKey
     });
 
-    // Build the prompt - now includes store/date extraction
+    // Build the prompt - includes scanned items for priority matching
+    const scannedItemsList = scannedItems.length > 0
+      ? scannedItems.map(s => {
+          const pkgInfo = s.units_per_package && s.units_per_package > 1
+            ? ` (${s.units_per_package} ${s.unit_name || 'units'} per ${s.package_name || 'package'})`
+            : '';
+          return `- ${s.brand || ''} ${s.name}${pkgInfo} [ID: ${s.product_id || 'NEW'}]`;
+        }).join('\n')
+      : '(None scanned yet)';
+
     const prompt = `You are reading a store receipt image. Extract ALL information from the receipt.
 
-PRODUCT CATALOG (items the user has in their inventory system):
-${products.length > 0 ? products.map(p => `ID: ${p.id} | Barcode: ${p.barcode} | ${p.brand || 'N/A'} - ${p.name} (${p.category})`).join('\n') : '(No products in catalog yet)'}
+**PRIORITY: SCANNED ITEMS** - The user has already scanned these barcodes. Match receipt lines to these FIRST:
+${scannedItemsList}
+
+PRODUCT CATALOG (all items in inventory system):
+${products.length > 0 ? products.map(p => {
+  const pkgInfo = p.units_per_package && p.units_per_package > 1
+    ? ` [${p.units_per_package} ${p.unit_name || 'units'}/${p.package_name || 'pkg'}]`
+    : '';
+  return `ID: ${p.id} | ${p.brand || 'N/A'} - ${p.name}${pkgInfo} (${p.category})`;
+}).join('\n') : '(No products in catalog yet)'}
 
 Tasks:
 1. STORE INFORMATION - Read from the receipt header:
@@ -113,21 +145,21 @@ Tasks:
 2. PRODUCT ITEMS - Read every item line on the receipt:
    - Item name/description as printed
    - Barcode/UPC if visible
-   - Price per item
+   - Price per item (this is the PACKAGE price, not per-unit)
    - Quantity (look for "x2", "QTY 3", or multiple lines)
 
-3. MATCH TO CATALOG - Match receipt items to the product catalog:
-   - Receipts use heavy abbreviations:
-     * "BRE" = "Black Rifle Energy" or "Black Rifle Coffee Company"
-     * "PJT MNGO" = "Project Mango"
-     * "RGR BERY" = "Ranger Berry"
-     * "FDM PNCH" = "Freedom Punch"
-     * "MNSTR" = "Monster Energy"
-     * "ALE" or "ALANI" = "Alani Nu"
-   - Use barcode numbers to match if they appear on receipt and in catalog
+3. MATCH TO SCANNED ITEMS FIRST - Look for receipt lines that match scanned items:
+   - "SABRA" matches "Sabra Hummus"
+   - "HUMMUS" matches "Sabra Hummus"
+   - Brand abbreviations: "BRE" = "Black Rifle", "MNSTR" = "Monster", "ALE" = "Alani Nu"
+   - If a scanned item has a brand, look for that brand name on the receipt
+   - Mark matched scanned items with high confidence
+
+4. MATCH REMAINING TO CATALOG - For items not matching scanned items:
+   - Use barcode numbers if visible
    - Mark items NOT in catalog as is_new_product: true
 
-4. TOTALS - Extract:
+5. TOTALS - Extract:
    - Subtotal (before tax)
    - Tax amount
    - Total (what was charged)
@@ -144,14 +176,14 @@ Respond ONLY with valid JSON, no markdown, no backticks:
       "receipt_text": "abbreviated text as printed on receipt",
       "parsed_name": "full product name (your best interpretation)",
       "barcode": "UPC if visible, null otherwise",
-      "price": 2.37,
+      "price": 5.48,
       "quantity": 1,
-      "product_id": "uuid if matched to catalog, null if not",
+      "product_id": "uuid if matched to catalog/scanned, null if not",
       "confidence": "high",
       "is_new_product": false,
       "suggested_brand": "Brand name for new products, null if matched",
       "suggested_category": "Category for new products, null if matched",
-      "reasoning": "brief explanation of match"
+      "reasoning": "Matched to scanned item: Sabra Hummus"
     }
   ],
   "subtotal": 14.96,
@@ -162,12 +194,12 @@ Respond ONLY with valid JSON, no markdown, no backticks:
 }
 
 Important:
-- Extract ALL product items, not just ones matching the catalog
-- price and quantity must be numbers
-- For items not in catalog: product_id is null, is_new_product is true
+- PRIORITIZE matching to scanned items - if user scanned "Sabra Hummus", find that on the receipt
+- price is the PACKAGE price as shown on receipt (e.g., $5.48 for a 6-pack)
+- quantity is number of packages purchased (usually 1)
+- Extract ALL product items, not just ones matching
 - confidence: "high" = certain match, "medium" = likely, "low" = uncertain
-- Ignore tax lines, payment lines, change amounts — only actual product items
-- The purchase_date should be extracted from the receipt, format as YYYY-MM-DD`;
+- Ignore tax lines, payment lines, change amounts — only actual product items`;
 
     console.log('[AI Vision] Sending receipt image with', products.length, 'products in catalog');
 

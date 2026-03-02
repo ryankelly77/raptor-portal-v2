@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-C';
+const BUILD_VERSION = 'v2024-MAR02-D';
 
 interface ErrorInfo {
   message: string;
@@ -315,9 +315,24 @@ export default function ReceiveItemsPage() {
         name: p.name,
         barcode: p.barcode,
         category: p.category,
+        units_per_package: p.units_per_package,
+        unit_name: p.unit_name,
+        package_name: p.package_name,
       }));
 
-      console.log('[AI Vision] Sending image with', products.length, 'products in catalog');
+      // Include scanned items so AI can prioritize matching them
+      const scannedItems = items.map(item => ({
+        product_id: item.productId,
+        barcode: item.barcode,
+        name: item.name,
+        brand: item.brand,
+        quantity: item.quantity,
+        units_per_package: item.units_per_package,
+        unit_name: item.unit_name,
+        package_name: item.package_name,
+      }));
+
+      console.log('[AI Vision] Sending image with', products.length, 'products,', scannedItems.length, 'scanned items');
 
       // 3. Send to AI Vision endpoint
       const res = await adminFetch('/api/admin/inventory/match-receipt', {
@@ -325,6 +340,7 @@ export default function ReceiveItemsPage() {
         body: JSON.stringify({
           imageUrl,
           products,
+          scannedItems,
         }),
       });
 
@@ -593,7 +609,18 @@ export default function ReceiveItemsPage() {
           if (!productId) continue;
         }
 
-        // Create purchase item
+        // Calculate unit quantities and costs
+        // If item has units_per_package > 1, convert packages to individual units
+        const unitsPerPkg = item.units_per_package || 1;
+        const totalUnits = item.quantity * unitsPerPkg; // e.g., 1 package × 6 units = 6 units
+        const packagePrice = item.unitCost ? parseFloat(item.unitCost) : null;
+        const perUnitCost = packagePrice && unitsPerPkg > 1
+          ? Math.round((packagePrice / unitsPerPkg) * 100) / 100 // e.g., $5.48 / 6 = $0.91
+          : packagePrice;
+
+        console.log('[Receive] Item:', item.name, '| Packages:', item.quantity, '| Units/pkg:', unitsPerPkg, '| Total units:', totalUnits, '| Package price:', packagePrice, '| Per-unit cost:', perUnitCost);
+
+        // Create purchase item with per-unit cost (store individual units)
         const purchaseItemRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
@@ -602,8 +629,8 @@ export default function ReceiveItemsPage() {
             data: {
               purchase_id: purchaseId,
               product_id: productId,
-              quantity: item.quantity,
-              unit_cost: item.unitCost ? parseFloat(item.unitCost) : null,
+              quantity: totalUnits, // Store as individual units
+              unit_cost: perUnitCost, // Store per-unit cost
             },
           }),
         });
@@ -613,7 +640,8 @@ export default function ReceiveItemsPage() {
           console.error('[Receive] Failed to create purchase item:', errData);
         }
 
-        // Create inventory movement
+        // Create inventory movement (quantity is in PACKAGES for movements)
+        // The dashboard calculates: packages × units_per_package to get total units
         const movementRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
@@ -621,10 +649,10 @@ export default function ReceiveItemsPage() {
             action: 'create',
             data: {
               product_id: productId,
-              quantity: item.quantity,
+              quantity: item.quantity, // Packages (dashboard multiplies by units_per_package)
               movement_type: 'purchase_in',
               moved_by: purchasedBy,
-              notes: `Received from ${storeName}`,
+              notes: `Received from ${storeName}${unitsPerPkg > 1 ? ` (${item.quantity} pkg × ${unitsPerPkg} = ${totalUnits} units)` : ''}`,
             },
           }),
         });
@@ -635,7 +663,7 @@ export default function ReceiveItemsPage() {
           throw new Error(`Failed to create movement: ${errData.error || 'Unknown error'}`);
         } else {
           const movementData = await movementRes.json();
-          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', item.quantity);
+          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', item.quantity, 'pkgs (', totalUnits, 'units)');
         }
       }
 
@@ -1343,7 +1371,12 @@ export default function ReceiveItemsPage() {
             <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Items</h3>
             {items.map((item) => {
               const hasPackageInfo = item.units_per_package && item.units_per_package > 1;
-              const totalUnits = hasPackageInfo ? item.quantity * (item.units_per_package || 1) : item.quantity;
+              const unitsPerPkg = item.units_per_package || 1;
+              const totalUnits = item.quantity * unitsPerPkg;
+              const packagePrice = item.unitCost ? parseFloat(item.unitCost) : null;
+              const perUnitCost = packagePrice && unitsPerPkg > 1
+                ? Math.round((packagePrice / unitsPerPkg) * 100) / 100
+                : packagePrice;
               return (
                 <div key={item.barcode} style={{ padding: '12px', background: '#f9fafb', borderRadius: '10px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
@@ -1357,8 +1390,15 @@ export default function ReceiveItemsPage() {
                       )}
                     </div>
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: '16px' }}>
-                    {item.unitCost ? `$${parseFloat(item.unitCost).toFixed(2)}` : '—'}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 700, fontSize: '16px' }}>
+                      {packagePrice ? `$${packagePrice.toFixed(2)}` : '—'}
+                    </div>
+                    {hasPackageInfo && perUnitCost && (
+                      <div style={{ fontSize: '11px', color: '#2563eb' }}>
+                        = ${perUnitCost.toFixed(2)}/{item.unit_name}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
