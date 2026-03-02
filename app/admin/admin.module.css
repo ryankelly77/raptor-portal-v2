@@ -39,6 +39,8 @@
   flex: 1;
   padding: 16px 0;
   overflow-y: auto;
+  min-height: 0; /* Needed for flex overflow to work */
+  -webkit-overflow-scrolling: touch;
 }
 
 .navItem {
