@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { AdminShell } from '../components/AdminShell';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR01-C';
+const BUILD_VERSION = 'v2024-MAR01-D';
 
 interface Product {
   id: string;
@@ -35,13 +34,8 @@ interface SummaryStats {
   totalValue: number;
 }
 
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return sessionStorage.getItem('adminToken');
-}
-
 function getAuthHeaders(): HeadersInit {
-  const token = getToken();
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -49,9 +43,8 @@ function getAuthHeaders(): HeadersInit {
 }
 
 export default function InventoryPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<SummaryStats>({
     totalProducts: 0,
     onHandQty: 0,
@@ -64,14 +57,7 @@ export default function InventoryPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-
-      // Check token first
-      const token = getToken();
-      if (!token) {
-        console.warn('[Inventory] No token, redirecting to login');
-        router.push('/admin/login');
-        return;
-      }
+      setError(null);
 
       // Load products
       const productsRes = await fetch('/api/admin/crud', {
@@ -80,13 +66,9 @@ export default function InventoryPage() {
         body: JSON.stringify({ table: 'products', action: 'read' }),
       });
 
-      // Handle auth error
-      if (productsRes.status === 401) {
-        sessionStorage.removeItem('adminAuth');
-        sessionStorage.removeItem('adminToken');
-        setAuthError(true);
-        router.push('/admin/login');
-        return;
+      if (!productsRes.ok) {
+        const errData = await productsRes.json();
+        throw new Error(errData.error || 'Failed to load products');
       }
 
       const productsData = await productsRes.json();
@@ -145,10 +127,11 @@ export default function InventoryPage() {
       });
     } catch (err) {
       console.error('Error loading inventory data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -197,18 +180,6 @@ export default function InventoryPage() {
     });
   }
 
-  if (authError) {
-    return (
-      <AdminShell title="Inventory">
-        <div className={styles.inventoryPage}>
-          <div style={{ textAlign: 'center', padding: '40px', color: '#dc2626' }}>
-            Session expired. Redirecting to login...
-          </div>
-        </div>
-      </AdminShell>
-    );
-  }
-
   if (loading) {
     return (
       <AdminShell title="Inventory">
@@ -228,6 +199,13 @@ export default function InventoryPage() {
         <div style={{ background: '#fef3c7', color: '#92400e', padding: '8px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px', fontFamily: 'monospace' }}>
           Build: {BUILD_VERSION}
         </div>
+
+        {/* Error display */}
+        {error && (
+          <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+            {error}
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className={styles.summaryGrid}>

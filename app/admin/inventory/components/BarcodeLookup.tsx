@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import styles from '../inventory.module.css';
 
 interface Product {
@@ -38,13 +37,8 @@ interface BarcodeLookupProps {
   onResult: (result: LookupResult) => void;
 }
 
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return sessionStorage.getItem('adminToken');
-}
-
 function getAuthHeaders(): HeadersInit {
-  const token = getToken();
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -81,9 +75,8 @@ function findSimilarBrand(incoming: string, existingBrands: BrandInfo[]): BrandI
 }
 
 export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [existingBrands, setExistingBrands] = useState<BrandInfo[]>([]);
   const [similarBrand, setSimilarBrand] = useState<BrandInfo | null>(null);
@@ -105,18 +98,9 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
     setLoading(true);
     setResult(null);
     setSimilarBrand(null);
-    setAuthError(false);
+    setError(null);
 
     try {
-      // Check token first
-      const token = getToken();
-      if (!token) {
-        console.warn('[BarcodeLookup] No token, redirecting to login');
-        setAuthError(true);
-        router.push('/admin/login');
-        return;
-      }
-
       // Step 1: Fetch existing products to get brands AND check for barcode
       const res = await fetch('/api/admin/crud', {
         method: 'POST',
@@ -124,14 +108,9 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
         body: JSON.stringify({ table: 'products', action: 'read' }),
       });
 
-      // Handle auth error
-      if (res.status === 401) {
-        console.warn('[BarcodeLookup] Auth error, redirecting to login');
-        sessionStorage.removeItem('adminAuth');
-        sessionStorage.removeItem('adminToken');
-        setAuthError(true);
-        router.push('/admin/login');
-        return;
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to load products');
       }
 
       const data = await res.json();
@@ -251,10 +230,11 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
       setBrandFilter('');
     } catch (err) {
       console.error('Lookup error:', err);
+      setError(err instanceof Error ? err.message : 'Lookup failed');
     } finally {
       setLoading(false);
     }
-  }, [barcode, onResult, useExistingBrand, router]);
+  }, [barcode, onResult, useExistingBrand]);
 
   useEffect(() => {
     if (barcode) {
@@ -281,16 +261,6 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
       return;
     }
 
-    // Check token first
-    const token = getToken();
-    if (!token) {
-      sessionStorage.removeItem('adminAuth');
-      sessionStorage.removeItem('adminToken');
-      alert('Session expired. Please log in again.');
-      router.push('/admin/login');
-      return;
-    }
-
     setSaving(true);
     try {
       const productData = {
@@ -308,16 +278,11 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
         body: JSON.stringify({ table: 'products', action: 'create', data: productData }),
       });
 
-      // Handle auth error
-      if (saveRes.status === 401) {
-        sessionStorage.removeItem('adminAuth');
-        sessionStorage.removeItem('adminToken');
-        alert('Session expired. Please log in again.');
-        router.push('/admin/login');
-        return;
-      }
-
       const saveData = await saveRes.json();
+
+      if (!saveRes.ok) {
+        throw new Error(saveData.error || 'Failed to save product');
+      }
 
       if (saveData.data) {
         const finalResult: LookupResult = {
@@ -328,7 +293,7 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
         };
         onResult(finalResult);
       } else {
-        throw new Error(saveData.error || 'Failed to save product');
+        throw new Error('No product data returned');
       }
     } catch (err) {
       console.error('Save error:', err);
@@ -338,19 +303,19 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
     }
   };
 
-  if (authError) {
-    return (
-      <div style={{ padding: '20px', textAlign: 'center', color: '#dc2626' }}>
-        <div>Session expired. Redirecting to login...</div>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div style={{ padding: '20px', textAlign: 'center' }}>
         <div className={styles.spinner} style={{ margin: '0 auto 12px' }} />
         <div>Looking up barcode...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '20px', textAlign: 'center', color: '#dc2626' }}>
+        <div>Error: {error}</div>
       </div>
     );
   }
