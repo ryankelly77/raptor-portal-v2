@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth/jwt';
+import jwt from 'jsonwebtoken';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 export async function POST(request: NextRequest) {
-  // Admin authentication
-  const auth = requireAdmin(request);
-  if (!auth.authorized) {
-    return NextResponse.json({ error: auth.error }, { status: 401 });
+  // JWT verification - SAME AS crud/route.ts
+  const authHeader = request.headers.get('authorization');
+
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'No authorization token' }, { status: 401 });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret) {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
+  try {
+    jwt.verify(token, secret);
+  } catch {
+    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
   }
 
   // Get Supabase admin client
