@@ -96,6 +96,7 @@ export default function InventoryPage() {
   const [expiringBatches, setExpiringBatches] = useState<ExpiringBatch[]>([]);
   const [productInventory, setProductInventory] = useState<ProductInventory[]>([]);
   const [showAllProducts, setShowAllProducts] = useState(false);
+  const [activeTab, setActiveTab] = useState<'inventory' | 'movements'>('inventory');
 
   const loadData = useCallback(async () => {
     try {
@@ -569,142 +570,215 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* Product Inventory List */}
+        {/* Tabbed Section: Product Inventory & Recent Movements */}
         <div className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Product Inventory</h2>
+          {/* Tab Header */}
+          <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
             <button
-              onClick={() => setShowAllProducts(!showAllProducts)}
-              className={styles.actionButton}
-              style={{ padding: '8px 16px', minHeight: 'auto' }}
+              onClick={() => setActiveTab('inventory')}
+              style={{
+                flex: 1,
+                padding: '14px 20px',
+                background: activeTab === 'inventory' ? '#fff' : '#f9fafb',
+                border: 'none',
+                borderBottom: activeTab === 'inventory' ? '2px solid #FF580F' : '2px solid transparent',
+                color: activeTab === 'inventory' ? '#FF580F' : '#6b7280',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
             >
-              {showAllProducts ? 'Show Less' : `Show All (${productInventory.length})`}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              </svg>
+              Product Inventory
+            </button>
+            <button
+              onClick={() => setActiveTab('movements')}
+              style={{
+                flex: 1,
+                padding: '14px 20px',
+                background: activeTab === 'movements' ? '#fff' : '#f9fafb',
+                border: 'none',
+                borderBottom: activeTab === 'movements' ? '2px solid #FF580F' : '2px solid transparent',
+                color: activeTab === 'movements' ? '#FF580F' : '#6b7280',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                <polyline points="17 6 23 6 23 12" />
+              </svg>
+              Recent Movements
             </button>
           </div>
+
+          {/* Tab Content */}
           <div className={styles.sectionBody}>
-            {productInventory.length === 0 ? (
-              <div className={styles.emptyState}>
-                <p>No inventory on hand.</p>
-              </div>
-            ) : (
-              <div>
-                {/* Header */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 80px', gap: '8px', padding: '8px 12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>
-                  <div>Product</div>
-                  <div style={{ textAlign: 'right' }}>On-Hand</div>
-                  <div style={{ textAlign: 'right' }}>In Machine</div>
-                  <div style={{ textAlign: 'right' }}>Unit Cost</div>
-                  <div style={{ textAlign: 'right' }}>Earliest Exp</div>
-                  <div style={{ textAlign: 'right' }}>Actions</div>
-                </div>
-                {/* Rows */}
-                {(showAllProducts ? productInventory : productInventory.slice(0, 5)).map((inv) => (
-                  <div
-                    key={inv.product.id}
+            {/* Product Inventory Tab */}
+            {activeTab === 'inventory' && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                  <button
+                    onClick={() => setShowAllProducts(!showAllProducts)}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 80px',
-                      gap: '8px',
-                      padding: '10px 12px',
-                      borderBottom: '1px solid #e5e7eb',
-                      fontSize: '13px',
-                      alignItems: 'center',
+                      padding: '6px 12px',
+                      background: '#f3f4f6',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      color: '#374151',
+                      cursor: 'pointer',
                     }}
                   >
-                    <div>
-                      {inv.product.brand && <span style={{ color: '#FF580F', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}>{inv.product.brand} </span>}
-                      <span style={{ fontWeight: 500 }}>{inv.product.name}</span>
+                    {showAllProducts ? 'Show Less' : `Show All (${productInventory.length})`}
+                  </button>
+                </div>
+                {productInventory.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <p>No inventory on hand.</p>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Header */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 80px', gap: '8px', padding: '8px 12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>
+                      <div>Product</div>
+                      <div style={{ textAlign: 'right' }}>On-Hand</div>
+                      <div style={{ textAlign: 'right' }}>In Machine</div>
+                      <div style={{ textAlign: 'right' }}>Unit Cost</div>
+                      <div style={{ textAlign: 'right' }}>Earliest Exp</div>
+                      <div style={{ textAlign: 'right' }}>Actions</div>
                     </div>
-                    <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>{inv.onHandQty}</div>
-                    <div style={{ textAlign: 'right', color: '#6b7280' }}>{inv.inMachineQty}</div>
-                    <div style={{ textAlign: 'right', color: '#6b7280' }}>{inv.unitCost ? `$${inv.unitCost.toFixed(2)}` : '—'}</div>
-                    <div style={{
-                      textAlign: 'right',
-                      fontSize: '12px',
-                      color: inv.expirationStatus === 'critical' ? '#dc2626' : inv.expirationStatus === 'warning' ? '#f59e0b' : '#22c55e',
-                      fontWeight: inv.expirationStatus === 'critical' || inv.expirationStatus === 'warning' ? 600 : 400,
-                    }}>
-                      {inv.earliestExpiration ? formatExpDate(inv.earliestExpiration) : '—'}
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <Link
-                        href={`/admin/inventory/adjust?product=${inv.product.id}`}
+                    {/* Rows */}
+                    {(showAllProducts ? productInventory : productInventory.slice(0, 5)).map((inv) => (
+                      <div
+                        key={inv.product.id}
                         style={{
-                          padding: '4px 8px',
-                          background: '#f3f4f6',
-                          color: '#374151',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          textDecoration: 'none',
-                          display: 'inline-block',
+                          display: 'grid',
+                          gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 80px',
+                          gap: '8px',
+                          padding: '10px 12px',
+                          borderBottom: '1px solid #e5e7eb',
+                          fontSize: '13px',
+                          alignItems: 'center',
                         }}
                       >
-                        Adjust
-                      </Link>
-                    </div>
+                        <div>
+                          {inv.product.brand && <span style={{ color: '#FF580F', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}>{inv.product.brand} </span>}
+                          <span style={{ fontWeight: 500 }}>{inv.product.name}</span>
+                        </div>
+                        <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>{inv.onHandQty}</div>
+                        <div style={{ textAlign: 'right', color: '#6b7280' }}>{inv.inMachineQty}</div>
+                        <div style={{ textAlign: 'right', color: '#6b7280' }}>{inv.unitCost ? `$${inv.unitCost.toFixed(2)}` : '—'}</div>
+                        <div style={{
+                          textAlign: 'right',
+                          fontSize: '12px',
+                          color: inv.expirationStatus === 'critical' ? '#dc2626' : inv.expirationStatus === 'warning' ? '#f59e0b' : '#22c55e',
+                          fontWeight: inv.expirationStatus === 'critical' || inv.expirationStatus === 'warning' ? 600 : 400,
+                        }}>
+                          {inv.earliestExpiration ? formatExpDate(inv.earliestExpiration) : '—'}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <Link
+                            href={`/admin/inventory/adjust?product=${inv.product.id}`}
+                            style={{
+                              padding: '4px 8px',
+                              background: '#f3f4f6',
+                              color: '#374151',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              textDecoration: 'none',
+                              display: 'inline-block',
+                            }}
+                          >
+                            Adjust
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
-          </div>
-        </div>
 
-        {/* Recent Movements */}
-        <div className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Recent Movements</h2>
-            <Link href="/admin/inventory/movements" className={styles.actionButton} style={{ padding: '8px 16px', minHeight: 'auto' }}>
-              View All
-            </Link>
-          </div>
-          <div className={styles.sectionBody}>
-            {recentMovements.length === 0 ? (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyIcon}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  </svg>
+            {/* Recent Movements Tab */}
+            {activeTab === 'movements' && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                  <Link
+                    href="/admin/inventory/movements"
+                    style={{
+                      padding: '6px 12px',
+                      background: '#f3f4f6',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      color: '#374151',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    View All
+                  </Link>
                 </div>
-                <p>No inventory movements yet.</p>
-                <p>Start by receiving items or importing sales data.</p>
-              </div>
-            ) : (
-              <div className={styles.movementList}>
-                {recentMovements.map((movement) => (
-                  <div key={movement.id} className={styles.movementItem}>
-                    <div className={`${styles.movementIcon} ${styles[getMovementIcon(movement.movement_type)]}`}>
-                      {movement.movement_type === 'purchase_in' || movement.movement_type === 'restock_in' ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="12" y1="5" x2="12" y2="19" />
-                          <polyline points="19 12 12 19 5 12" />
-                        </svg>
-                      ) : movement.movement_type === 'sold' ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="12" y1="1" x2="12" y2="23" />
-                          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                        </svg>
-                      ) : (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="12" y1="19" x2="12" y2="5" />
-                          <polyline points="5 12 12 5 19 12" />
-                        </svg>
-                      )}
+                {recentMovements.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <div className={styles.emptyIcon}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      </svg>
                     </div>
-                    <div className={styles.movementInfo}>
-                      <div className={styles.movementProduct}>
-                        {movement.product?.name || 'Unknown Product'}
-                      </div>
-                      <div className={styles.movementMeta}>
-                        {getMovementLabel(movement.movement_type)} • {formatDate(movement.created_at)}
-                      </div>
-                    </div>
-                    <div className={`${styles.movementQty} ${movement.quantity >= 0 ? styles.positive : styles.negative}`}>
-                      {movement.quantity >= 0 ? '+' : ''}{movement.quantity}
-                    </div>
+                    <p>No inventory movements yet.</p>
+                    <p>Start by receiving items or importing sales data.</p>
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className={styles.movementList}>
+                    {recentMovements.map((movement) => (
+                      <div key={movement.id} className={styles.movementItem}>
+                        <div className={`${styles.movementIcon} ${styles[getMovementIcon(movement.movement_type)]}`}>
+                          {movement.movement_type === 'purchase_in' || movement.movement_type === 'restock_in' ? (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <polyline points="19 12 12 19 5 12" />
+                            </svg>
+                          ) : movement.movement_type === 'sold' ? (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="12" y1="1" x2="12" y2="23" />
+                              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                            </svg>
+                          ) : (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="12" y1="19" x2="12" y2="5" />
+                              <polyline points="5 12 12 5 19 12" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className={styles.movementInfo}>
+                          <div className={styles.movementProduct}>
+                            {movement.product?.name || 'Unknown Product'}
+                          </div>
+                          <div className={styles.movementMeta}>
+                            {getMovementLabel(movement.movement_type)} • {formatDate(movement.created_at)}
+                          </div>
+                        </div>
+                        <div className={`${styles.movementQty} ${movement.quantity >= 0 ? styles.positive : styles.negative}`}>
+                          {movement.quantity >= 0 ? '+' : ''}{movement.quantity}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
