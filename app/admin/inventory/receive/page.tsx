@@ -29,8 +29,8 @@ export default function ReceiveItemsPage() {
   const router = useRouter();
   const [step, setStep] = useState<'info' | 'scan' | 'review'>('info');
   const [purchaseInfo, setPurchaseInfo] = useState({
-    purchasedBy: '',
-    storeName: '',
+    purchasedBy: 'Cristian Kelly',
+    storeName: "Sam's",
     purchaseDate: new Date().toISOString().split('T')[0],
     receiptTotal: '',
   });
@@ -204,23 +204,28 @@ export default function ReceiveItemsPage() {
               <div className={styles.testBody}>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Purchased By *</label>
-                  <input
-                    type="text"
-                    className={styles.formInput}
+                  <select
+                    className={styles.formSelect}
                     value={purchaseInfo.purchasedBy}
                     onChange={(e) => setPurchaseInfo({ ...purchaseInfo, purchasedBy: e.target.value })}
-                    placeholder="Your name"
-                  />
+                  >
+                    <option value="Cristian Kelly">Cristian Kelly</option>
+                    <option value="Ryan Kelly">Ryan Kelly</option>
+                  </select>
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Store Name</label>
-                  <input
-                    type="text"
-                    className={styles.formInput}
+                  <select
+                    className={styles.formSelect}
                     value={purchaseInfo.storeName}
                     onChange={(e) => setPurchaseInfo({ ...purchaseInfo, storeName: e.target.value })}
-                    placeholder="Costco, Sam's Club, etc."
-                  />
+                  >
+                    <option value="Sam's">Sam&apos;s</option>
+                    <option value="Walmart">Walmart</option>
+                    <option value="Costco">Costco</option>
+                    <option value="Amazon">Amazon</option>
+                    <option value="HEB">HEB</option>
+                  </select>
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Purchase Date</label>
