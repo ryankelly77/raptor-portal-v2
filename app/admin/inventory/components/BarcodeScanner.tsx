@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import styles from '../inventory.module.css';
 
 interface BarcodeScannerProps {
@@ -12,18 +11,23 @@ interface BarcodeScannerProps {
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [error, setError] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState('');
-  const [isStarting, setIsStarting] = useState(true);
-  const [isActive, setIsActive] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const mountedRef = useRef(true);
+  const [isReady, setIsReady] = useState(false);
+  const scannerRef = useRef<any>(null);
+  const containerIdRef = useRef(`scanner-${Date.now()}`);
 
   useEffect(() => {
-    mountedRef.current = true;
+    let mounted = true;
 
-    const startScanner = async () => {
+    const initScanner = async () => {
       try {
-        // Create scanner instance
-        const scanner = new Html5Qrcode('barcode-reader', {
+        // Dynamically import to avoid SSR issues
+        const { Html5QrcodeScanner, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
+
+        if (!mounted) return;
+
+        const config = {
+          fps: 10,
+          qrbox: { width: 250, height: 100 },
           formatsToSupport: [
             Html5QrcodeSupportedFormats.UPC_A,
             Html5QrcodeSupportedFormats.UPC_E,
@@ -31,66 +35,56 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             Html5QrcodeSupportedFormats.EAN_8,
             Html5QrcodeSupportedFormats.CODE_128,
             Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.QR_CODE,
           ],
-          verbose: false,
-        });
+          rememberLastUsedCamera: true,
+          showTorchButtonIfSupported: true,
+        };
+
+        const scanner = new Html5QrcodeScanner(
+          containerIdRef.current,
+          config,
+          /* verbose= */ false
+        );
+
         scannerRef.current = scanner;
 
-        // Get cameras
-        const cameras = await Html5Qrcode.getCameras();
-        if (!cameras || cameras.length === 0) {
-          throw new Error('No cameras found');
-        }
-
-        // Find back camera
-        const backCamera = cameras.find(
-          (c) =>
-            c.label.toLowerCase().includes('back') ||
-            c.label.toLowerCase().includes('rear') ||
-            c.label.toLowerCase().includes('environment')
-        );
-        const cameraId = backCamera?.id || cameras[0].id;
-
-        // Start scanning
-        await scanner.start(
-          cameraId,
-          {
-            fps: 10,
-            qrbox: { width: 280, height: 120 },
-          },
-          (decodedText) => {
-            if (mountedRef.current) {
-              // Vibrate on success if available
-              if (navigator.vibrate) {
-                navigator.vibrate(100);
-              }
-              onScan(decodedText);
+        scanner.render(
+          (decodedText: string) => {
+            // Success callback
+            if (navigator.vibrate) {
+              navigator.vibrate(100);
             }
+            scanner.clear();
+            onScan(decodedText);
           },
-          () => {
-            // Ignore errors (no barcode in frame)
+          (errorMessage: string) => {
+            // Error callback - ignore, these are just "no code found" messages
+            console.debug('Scan error:', errorMessage);
           }
         );
 
-        if (mountedRef.current) {
-          setIsActive(true);
-          setIsStarting(false);
-        }
+        setIsReady(true);
       } catch (err) {
-        console.error('Scanner error:', err);
-        if (mountedRef.current) {
-          setError('Could not start camera. Please allow camera access or use manual entry.');
-          setIsStarting(false);
+        console.error('Scanner init error:', err);
+        if (mounted) {
+          setError('Could not initialize scanner. Please use manual entry.');
         }
       }
     };
 
-    startScanner();
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(initScanner, 100);
 
     return () => {
-      mountedRef.current = false;
+      mounted = false;
+      clearTimeout(timer);
       if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
+        try {
+          scannerRef.current.clear();
+        } catch (e) {
+          // Ignore cleanup errors
+        }
       }
     };
   }, [onScan]);
@@ -98,14 +92,25 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   function handleManualSubmit() {
     const barcode = manualBarcode.trim();
     if (barcode) {
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.clear();
+        } catch (e) {
+          // Ignore
+        }
+      }
       onScan(barcode);
       setManualBarcode('');
     }
   }
 
   function handleClose() {
-    if (scannerRef.current && isActive) {
-      scannerRef.current.stop().catch(() => {});
+    if (scannerRef.current) {
+      try {
+        scannerRef.current.clear();
+      } catch (e) {
+        // Ignore
+      }
     }
     if (onClose) {
       onClose();
@@ -114,30 +119,25 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
 
   return (
     <div>
-      {/* Camera Scanner */}
-      <div className={styles.scannerContainer}>
-        <div id="barcode-reader" style={{ width: '100%' }} />
-      </div>
+      {/* Scanner Container - html5-qrcode will render its UI here */}
+      <div
+        id={containerIdRef.current}
+        style={{
+          width: '100%',
+          marginBottom: '16px',
+        }}
+      />
 
       {/* Error Message */}
       {error && (
-        <div style={{ color: '#dc2626', padding: '12px', background: '#fef2f2', borderRadius: '8px', marginBottom: '16px', marginTop: '16px' }}>
+        <div style={{
+          color: '#dc2626',
+          padding: '12px',
+          background: '#fef2f2',
+          borderRadius: '8px',
+          marginBottom: '16px'
+        }}>
           {error}
-        </div>
-      )}
-
-      {/* Starting Status */}
-      {isStarting && !error && (
-        <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
-          <div className={styles.spinner} style={{ margin: '0 auto 12px' }} />
-          Starting camera...
-        </div>
-      )}
-
-      {/* Active Status */}
-      {isActive && !error && (
-        <div style={{ textAlign: 'center', padding: '12px', color: '#16a34a', background: '#dcfce7', borderRadius: '8px', marginTop: '12px' }}>
-          Scanner active - point at barcode
         </div>
       )}
 
@@ -154,7 +154,11 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             if (e.key === 'Enter') handleManualSubmit();
           }}
         />
-        <button className={styles.btnPrimary} onClick={handleManualSubmit} style={{ flex: '0 0 auto' }}>
+        <button
+          className={styles.btnPrimary}
+          onClick={handleManualSubmit}
+          style={{ flex: '0 0 auto' }}
+        >
           Add
         </button>
       </div>
