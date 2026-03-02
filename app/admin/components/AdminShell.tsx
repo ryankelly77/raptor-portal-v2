@@ -6,13 +6,13 @@ import Link from 'next/link';
 import { useAdminAuth } from '@/lib/contexts/AdminAuthContext';
 import styles from '../admin.module.css';
 
-// Navigation items
+// Navigation items - INVENTORY IS HERE (item 5)
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
   { href: '/admin/projects', label: 'Projects', icon: 'projects' },
   { href: '/admin/property-managers', label: 'Property Managers', icon: 'users' },
-  { href: '/admin/messages', label: 'Messages', icon: 'messages' },
   { href: '/admin/inventory', label: 'Inventory', icon: 'inventory' },
+  { href: '/admin/messages', label: 'Messages', icon: 'messages' },
   { href: '/admin/documents', label: 'Documents', icon: 'documents' },
   { href: '/admin/templates', label: 'Email Templates', icon: 'templates' },
   { href: '/admin/activity', label: 'Activity Log', icon: 'activity' },
