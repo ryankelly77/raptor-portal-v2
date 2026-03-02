@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminShell } from '../../components/AdminShell';
 import { BarcodeScanner } from '../components/BarcodeScanner';
@@ -27,22 +27,20 @@ function getAuthHeaders(): HeadersInit {
 
 export default function ReceiveItemsPage() {
   const router = useRouter();
-  const [step, setStep] = useState<'info' | 'scan' | 'review'>('info');
+  const [step, setStep] = useState<'info' | 'scan' | 'review' | 'receipt'>('info');
   const [purchaseInfo, setPurchaseInfo] = useState({
     purchasedBy: 'Cristian Kelly',
     storeName: "Sam's",
     purchaseDate: new Date().toISOString().split('T')[0],
-    receiptTotal: '',
   });
   const [items, setItems] = useState<ScannedItem[]>([]);
   const [currentBarcode, setCurrentBarcode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedPurchaseId, setSavedPurchaseId] = useState<string | null>(null);
+  const [receiptUploading, setReceiptUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleStartScanning() {
-    if (!purchaseInfo.purchasedBy.trim()) {
-      alert('Please enter who made the purchase');
-      return;
-    }
     setStep('scan');
   }
 
@@ -105,11 +103,10 @@ export default function ReceiveItemsPage() {
           table: 'inventory_purchases',
           action: 'create',
           data: {
-            purchased_by: purchaseInfo.purchasedBy.trim(),
-            store_name: purchaseInfo.storeName.trim() || null,
+            purchased_by: purchaseInfo.purchasedBy,
+            store_name: purchaseInfo.storeName,
             purchase_date: purchaseInfo.purchaseDate,
-            receipt_total: purchaseInfo.receiptTotal ? parseFloat(purchaseInfo.receiptTotal) : null,
-            status: 'verified',
+            status: 'pending',
           },
         }),
       });
@@ -119,6 +116,8 @@ export default function ReceiveItemsPage() {
       if (!purchaseId) {
         throw new Error('Failed to create purchase record');
       }
+
+      setSavedPurchaseId(purchaseId);
 
       // 2. For each item, create purchase_item and movement
       for (const item of items) {
@@ -173,21 +172,73 @@ export default function ReceiveItemsPage() {
               product_id: productId,
               quantity: item.quantity,
               movement_type: 'purchase_in',
-              moved_by: purchaseInfo.purchasedBy.trim(),
-              notes: `Received from ${purchaseInfo.storeName || 'store'}`,
+              moved_by: purchaseInfo.purchasedBy,
+              notes: `Received from ${purchaseInfo.storeName}`,
             },
           }),
         });
       }
 
-      alert('Purchase saved successfully!');
-      router.push('/admin/inventory');
+      // Move to receipt photo step
+      setStep('receipt');
     } catch (err) {
       console.error('Error saving purchase:', err);
       alert('Error saving purchase');
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleReceiptUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !savedPurchaseId) return;
+
+    setReceiptUploading(true);
+    try {
+      // Upload the file
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'receipts');
+
+      const token = sessionStorage.getItem('adminToken');
+      const uploadRes = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+      const uploadData = await uploadRes.json();
+
+      if (uploadData.url) {
+        // Update the purchase record with receipt URL
+        await fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            table: 'inventory_purchases',
+            action: 'update',
+            id: savedPurchaseId,
+            data: {
+              receipt_image_url: uploadData.url,
+              status: 'verified',
+            },
+          }),
+        });
+
+        alert('Receipt uploaded successfully!');
+        router.push('/admin/inventory');
+      }
+    } catch (err) {
+      console.error('Error uploading receipt:', err);
+      alert('Error uploading receipt');
+    } finally {
+      setReceiptUploading(false);
+    }
+  }
+
+  function handleSkipReceipt() {
+    router.push('/admin/inventory');
   }
 
   return (
@@ -203,7 +254,7 @@ export default function ReceiveItemsPage() {
               </div>
               <div className={styles.testBody}>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Purchased By *</label>
+                  <label className={styles.formLabel}>Purchased By</label>
                   <select
                     className={styles.formSelect}
                     value={purchaseInfo.purchasedBy}
@@ -214,7 +265,7 @@ export default function ReceiveItemsPage() {
                   </select>
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Store Name</label>
+                  <label className={styles.formLabel}>Store</label>
                   <select
                     className={styles.formSelect}
                     value={purchaseInfo.storeName}
@@ -234,17 +285,6 @@ export default function ReceiveItemsPage() {
                     className={styles.formInput}
                     value={purchaseInfo.purchaseDate}
                     onChange={(e) => setPurchaseInfo({ ...purchaseInfo, purchaseDate: e.target.value })}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Receipt Total</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className={styles.formInput}
-                    value={purchaseInfo.receiptTotal}
-                    onChange={(e) => setPurchaseInfo({ ...purchaseInfo, receiptTotal: e.target.value })}
-                    placeholder="0.00"
                   />
                 </div>
               </div>
@@ -296,21 +336,21 @@ export default function ReceiveItemsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <button
                             onClick={() => updateItemQuantity(item.barcode, item.quantity - 1)}
-                            style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff' }}
+                            style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}
                           >
                             -
                           </button>
                           <span style={{ fontWeight: 600, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
                           <button
                             onClick={() => updateItemQuantity(item.barcode, item.quantity + 1)}
-                            style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff' }}
+                            style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}
                           >
                             +
                           </button>
                         </div>
                         <button
                           onClick={() => removeItem(item.barcode)}
-                          style={{ color: '#dc2626', background: 'none', border: 'none', padding: '8px' }}
+                          style={{ color: '#dc2626', background: 'none', border: 'none', padding: '8px', cursor: 'pointer' }}
                         >
                           ✕
                         </button>
@@ -341,15 +381,13 @@ export default function ReceiveItemsPage() {
               <div className={styles.testHeader}>
                 <h2 className={styles.testTitle}>Review Purchase</h2>
                 <p className={styles.testSubtitle}>
-                  {purchaseInfo.storeName || 'Purchase'} • {purchaseInfo.purchaseDate}
+                  {purchaseInfo.storeName} • {purchaseInfo.purchaseDate}
                 </p>
               </div>
               <div className={styles.testBody}>
                 <div style={{ marginBottom: '20px', padding: '12px', background: '#f3f4f6', borderRadius: '8px' }}>
                   <div><strong>Purchased by:</strong> {purchaseInfo.purchasedBy}</div>
-                  {purchaseInfo.receiptTotal && (
-                    <div><strong>Receipt total:</strong> ${parseFloat(purchaseInfo.receiptTotal).toFixed(2)}</div>
-                  )}
+                  <div><strong>Store:</strong> {purchaseInfo.storeName}</div>
                 </div>
 
                 <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
@@ -368,7 +406,7 @@ export default function ReceiveItemsPage() {
                         <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
                       </div>
                       {item.isNew && (
-                        <span style={{ fontSize: '11px', background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '4px' }}>
+                        <span style={{ fontSize: '11px', background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '4px', height: 'fit-content' }}>
                           NEW
                         </span>
                       )}
@@ -399,6 +437,63 @@ export default function ReceiveItemsPage() {
                   style={{ flex: 1 }}
                 >
                   {saving ? 'Saving...' : 'Save Purchase'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Receipt Photo */}
+          {step === 'receipt' && (
+            <div className={styles.testCard}>
+              <div className={styles.testHeader}>
+                <h2 className={styles.testTitle}>Receipt Photo</h2>
+                <p className={styles.testSubtitle}>Take a photo of the receipt for records</p>
+              </div>
+              <div className={styles.testBody}>
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    margin: '0 auto 20px',
+                    background: '#dcfce7',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px', color: '#16a34a' }}>
+                    Purchase Saved!
+                  </h3>
+                  <p style={{ color: '#6b7280', marginBottom: '24px' }}>
+                    {items.reduce((sum, i) => sum + i.quantity, 0)} items added to inventory
+                  </p>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={fileInputRef}
+                    onChange={handleReceiptUpload}
+                    style={{ display: 'none' }}
+                  />
+
+                  <button
+                    className={styles.btnPrimary}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={receiptUploading}
+                    style={{ width: '100%', marginBottom: '12px' }}
+                  >
+                    {receiptUploading ? 'Uploading...' : '📷 Take Receipt Photo'}
+                  </button>
+                </div>
+              </div>
+              <div className={styles.testFooter}>
+                <button className={styles.btnSecondary} onClick={handleSkipReceipt} style={{ width: '100%' }}>
+                  Skip for Now
                 </button>
               </div>
             </div>
