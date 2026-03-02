@@ -351,7 +351,7 @@ export function PhaseEditor({ phase, phaseNumber, projectId, surveyData, onRefre
                     href={phase.document_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: '#f97316', textDecoration: 'underline' }}
+                    style={{ color: '#FF580F', textDecoration: 'underline' }}
                   >
                     {phase.document_label || 'View Document'}
                   </a>

@@ -177,7 +177,7 @@ export function TaskEditor({ task, projectId, onUpdate, onDelete }: TaskEditorPr
         <div style={{ marginLeft: '8px' }}>
           {task.document_url ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <a href={task.document_url} target="_blank" rel="noopener noreferrer" style={{ color: '#f97316' }}>
+              <a href={task.document_url} target="_blank" rel="noopener noreferrer" style={{ color: '#FF580F' }}>
                 View Document
               </a>
               <button

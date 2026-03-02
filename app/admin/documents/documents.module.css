@@ -45,7 +45,7 @@
 }
 
 .searchInput:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .filterSelect {
@@ -60,7 +60,7 @@
 }
 
 .filterSelect:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 /* Stats */
@@ -83,7 +83,7 @@
 .statValue {
   font-size: 24px;
   font-weight: 700;
-  color: #f97316;
+  color: #FF580F;
 }
 
 .statLabel {
@@ -159,7 +159,7 @@
 .docIcon svg {
   width: 16px;
   height: 16px;
-  color: #f97316;
+  color: #FF580F;
 }
 
 .docName {
@@ -236,7 +236,7 @@
 
 .btnView:hover {
   background-color: #fff7ed;
-  color: #f97316;
+  color: #FF580F;
 }
 
 .btnDownload:hover {
@@ -283,7 +283,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid #e5e7eb;
-  border-top-color: #f97316;
+  border-top-color: #FF580F;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

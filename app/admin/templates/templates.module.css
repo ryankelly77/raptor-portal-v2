@@ -26,7 +26,7 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 24px;
   margin-bottom: 24px;
-  border: 2px solid #f97316;
+  border: 2px solid #FF580F;
 }
 
 .createForm h3 {
@@ -94,7 +94,7 @@
   display: inline-block;
   padding: 4px 10px;
   background-color: #fff7ed;
-  color: #f97316;
+  color: #FF580F;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
@@ -228,7 +228,7 @@
 }
 
 .formInput:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .formTextarea {
@@ -244,7 +244,7 @@
 }
 
 .formTextarea:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 /* Form Actions */
@@ -266,13 +266,13 @@
 }
 
 .btnPrimary {
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
   border: none;
 }
 
 .btnPrimary:hover:not(:disabled) {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 .btnPrimary:disabled {
@@ -313,7 +313,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid #e5e7eb;
-  border-top-color: #f97316;
+  border-top-color: #FF580F;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

@@ -30,7 +30,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -41,7 +41,7 @@
 }
 
 .createButton:hover {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 /* Filters */
@@ -64,7 +64,7 @@
 }
 
 .searchInput:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .filterSelect {
@@ -78,7 +78,7 @@
 }
 
 .filterSelect:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 /* Projects Grid */
@@ -186,7 +186,7 @@
 
 .pmName {
   font-size: 13px;
-  color: #f97316;
+  color: #FF580F;
   font-weight: 500;
   margin: 4px 0 12px;
 }
@@ -214,7 +214,7 @@
 
 .progressFill {
   height: 100%;
-  background-color: #f97316;
+  background-color: #FF580F;
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -265,7 +265,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid #e5e7eb;
-  border-top-color: #f97316;
+  border-top-color: #FF580F;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -358,7 +358,7 @@
 
 .formInput:focus,
 .formSelect:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .formHint {
@@ -376,7 +376,7 @@
 /* Buttons */
 .btnPrimary {
   padding: 10px 20px;
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -387,7 +387,7 @@
 }
 
 .btnPrimary:hover:not(:disabled) {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 .btnPrimary:disabled {
@@ -446,8 +446,8 @@
 }
 
 .step.active {
-  color: #f97316;
-  border-color: #f97316;
+  color: #FF580F;
+  border-color: #FF580F;
 }
 
 .step.completed {
@@ -483,12 +483,12 @@
 
 .optionButton:hover {
   background-color: #fff;
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .optionButton.selected {
   background-color: #fff7ed;
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .createNewButton {
@@ -507,8 +507,8 @@
 }
 
 .createNewButton:hover {
-  border-color: #f97316;
-  color: #f97316;
+  border-color: #FF580F;
+  color: #FF580F;
 }
 
 /* Config Section */

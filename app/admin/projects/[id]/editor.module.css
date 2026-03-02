@@ -7,7 +7,7 @@
 .stickyHeader {
   position: sticky;
   top: 0;
-  background: linear-gradient(135deg, #f97316, #ea580c);
+  background: linear-gradient(135deg, #FF580F, #e04e0d);
   color: #fff;
   padding: 12px 16px;
   margin: -24px -24px 24px;
@@ -130,7 +130,7 @@
 .formInput:focus,
 .formSelect:focus,
 .formTextarea:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .formTextarea {
@@ -203,7 +203,7 @@
 .toggleLabel input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  accent-color: #f97316;
+  accent-color: #FF580F;
 }
 
 /* Reminder Status */
@@ -278,7 +278,7 @@
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #f97316, #ea580c);
+  background: linear-gradient(90deg, #FF580F, #e04e0d);
   border-radius: 5px;
   transition: width 0.3s ease;
 }
@@ -293,7 +293,7 @@
 /* Buttons */
 .btnPrimary {
   padding: 10px 20px;
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -304,7 +304,7 @@
 }
 
 .btnPrimary:hover:not(:disabled) {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 .btnPrimary:disabled {
@@ -409,7 +409,7 @@
 }
 
 .phaseBlock.inProgress {
-  border-left: 4px solid #f97316;
+  border-left: 4px solid #FF580F;
   background-color: #fff7ed;
 }
 
@@ -436,7 +436,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
   border-radius: 50%;
   font-size: 13px;
@@ -543,7 +543,7 @@
 .checkboxRow input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #f97316;
+  accent-color: #FF580F;
 }
 
 /* Tasks Section */
@@ -576,7 +576,7 @@
   height: 18px;
   margin-top: 2px;
   cursor: pointer;
-  accent-color: #f97316;
+  accent-color: #FF580F;
   flex-shrink: 0;
 }
 
@@ -666,12 +666,12 @@
 }
 
 .pmTaskToggle input {
-  accent-color: #f97316;
+  accent-color: #FF580F;
 }
 
 .btnAddSmall {
   padding: 8px 16px;
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -681,7 +681,7 @@
 }
 
 .btnAddSmall:hover {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 /* Admin Inputs (speed, enclosure, etc.) */
@@ -893,8 +893,8 @@
 }
 
 .tab.active {
-  color: #f97316;
-  border-bottom-color: #f97316;
+  color: #FF580F;
+  border-bottom-color: #FF580F;
 }
 
 /* Empty State */
@@ -916,7 +916,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid #e5e7eb;
-  border-top-color: #f97316;
+  border-top-color: #FF580F;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

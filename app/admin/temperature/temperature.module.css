@@ -47,12 +47,12 @@
 }
 
 .exportButton {
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
 }
 
 .exportButton:hover {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 /* Section Tabs */
@@ -79,8 +79,8 @@
 }
 
 .tabButton.active {
-  background-color: #f97316;
-  border-color: #f97316;
+  background-color: #FF580F;
+  border-color: #FF580F;
   color: #fff;
 }
 
@@ -132,7 +132,7 @@
 }
 
 .addDriverForm input:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .btnPrimary,
@@ -148,12 +148,12 @@
 }
 
 .btnPrimary {
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
 }
 
 .btnPrimary:hover:not(:disabled) {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 .btnPrimary:disabled {
@@ -228,7 +228,7 @@
 }
 
 .editInput:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 /* Status Badge */
@@ -287,7 +287,7 @@
 
 .btnSmall.link {
   background-color: #fff7ed;
-  color: #f97316;
+  color: #FF580F;
 }
 
 .btnSmall.link:hover {
@@ -328,7 +328,7 @@
 
 .filterSelect:focus,
 .filterInput:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 /* Session Detail */
@@ -499,7 +499,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid #e5e7eb;
-  border-top-color: #f97316;
+  border-top-color: #FF580F;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

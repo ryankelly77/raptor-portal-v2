@@ -204,12 +204,12 @@
 }
 
 .btnRun {
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
 }
 
 .btnRun:hover:not(:disabled) {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 .btnRun:disabled {
@@ -253,7 +253,7 @@
 }
 
 .sqlInput:focus {
-  border-color: #f97316;
+  border-color: #FF580F;
 }
 
 .sqlActions {
@@ -273,13 +273,13 @@
 }
 
 .btnPrimary {
-  background-color: #f97316;
+  background-color: #FF580F;
   color: #fff;
   border: none;
 }
 
 .btnPrimary:hover:not(:disabled) {
-  background-color: #ea580c;
+  background-color: #e04e0d;
 }
 
 .btnPrimary:disabled {
@@ -336,7 +336,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid #e5e7eb;
-  border-top-color: #f97316;
+  border-top-color: #FF580F;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

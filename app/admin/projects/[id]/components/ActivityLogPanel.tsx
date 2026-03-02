@@ -105,7 +105,7 @@ export function ActivityLogPanel({ projectId }: ActivityLogPanelProps) {
         );
       case 'status_changed':
         return (
-          <svg viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" width="16" height="16">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#FF580F" strokeWidth="2" width="16" height="16">
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
