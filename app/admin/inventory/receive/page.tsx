@@ -583,11 +583,15 @@ export default function ReceiveItemsPage() {
 
   // Save everything
   const handleSave = async () => {
+    console.log('[Receive] handleSave called, items:', items.length);
+
     if (items.length === 0) {
+      alert('No items to save!');
       setError({ message: 'No items to save', endpoint: 'validation', status: 0 });
       return;
     }
 
+    console.log('[Receive] Starting save with', items.length, 'items');
     setSaving(true);
     setError(null);
 
@@ -713,10 +717,14 @@ export default function ReceiveItemsPage() {
 
     } catch (err: unknown) {
       console.error('[Receive] Save error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      alert('Save failed: ' + errorMsg);
       if (err instanceof ApiError || err instanceof AuthError) {
         setError({ message: err.message, endpoint: err.endpoint, status: err.status });
       } else if (err instanceof Error) {
         setError({ message: err.message, endpoint: '/api/admin/crud', status: 0 });
+      } else {
+        setError({ message: 'Unknown error occurred', endpoint: 'unknown', status: 0 });
       }
     } finally {
       setSaving(false);
@@ -1503,7 +1511,7 @@ export default function ReceiveItemsPage() {
             {/* Navigation */}
             <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
               <button onClick={() => setStep('reconcile')} style={{ flex: 1, padding: '14px', background: '#f3f4f6', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}>Back</button>
-              <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '16px', background: saving ? '#d1d5db' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '16px', cursor: saving ? 'wait' : 'pointer' }}>
+              <button type="button" onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '16px', background: saving ? '#d1d5db' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '16px', cursor: saving ? 'wait' : 'pointer' }}>
                 {saving ? 'Saving...' : 'Submit Purchase'}
               </button>
             </div>
