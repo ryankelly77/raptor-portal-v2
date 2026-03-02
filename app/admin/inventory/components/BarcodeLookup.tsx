@@ -253,6 +253,12 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             suggestions: []
           };
 
+          console.log('[BarcodeLookup] Checking brand normalization:', {
+            apiBrand,
+            existingBrandsCount: brandsWithCount.length,
+            existingBrands: brandsWithCount.slice(0, 10).map(b => b.brand)
+          });
+
           if (apiBrand && brandsWithCount.length > 0) {
             const match = findBrandMatch(apiBrand, brandsWithCount);
             console.log('[BarcodeLookup] Brand match result:', match);
@@ -261,8 +267,12 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
 
             if (match.match && (match.matchType === 'exact' || match.matchType === 'contains')) {
               normalizedBrand = match.match;
-              console.log('[BarcodeLookup] Normalized brand to:', normalizedBrand);
+              console.log('[BarcodeLookup] *** NORMALIZED brand from "' + apiBrand + '" to "' + normalizedBrand + '" ***');
             }
+          } else {
+            console.log('[BarcodeLookup] Skipping brand normalization:', {
+              reason: !apiBrand ? 'no API brand' : 'no existing brands in database'
+            });
           }
 
           // Try to determine category from Open Food Facts categories
@@ -512,35 +522,40 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             </div>
           </div>
 
-          {/* Brand match notification */}
-          {brandMatch && brandMatch.matchType === 'contains' && (
+          {/* Brand match notification - Normalized to existing brand */}
+          {brandMatch && (brandMatch.matchType === 'exact' || brandMatch.matchType === 'contains') && (
             <div style={{
               marginTop: '12px',
-              padding: '10px 12px',
+              padding: '12px 14px',
               background: '#dcfce7',
               borderRadius: '8px',
-              fontSize: '13px',
+              fontSize: '14px',
               color: '#16a34a',
               display: 'flex',
               alignItems: 'center',
+              border: '2px solid #22c55e',
             }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: '8px', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: '10px', flexShrink: 0 }}>
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              Matched to existing brand: <strong style={{ marginLeft: '4px' }}>{formData.brand}</strong>
+              <span>
+                <strong>Brand normalized:</strong> {formData.brand}
+              </span>
             </div>
           )}
 
+          {/* Brand match notification - Similar brand suggestions */}
           {brandMatch && brandMatch.matchType === 'similar' && brandMatch.suggestions.length > 0 && (
             <div style={{
               marginTop: '12px',
               padding: '12px',
               background: '#fef3c7',
               borderRadius: '8px',
-              fontSize: '13px',
+              fontSize: '14px',
+              border: '2px solid #f59e0b',
             }}>
-              <div style={{ color: '#92400e', marginBottom: '8px' }}>
-                Similar brand found. Did you mean:
+              <div style={{ color: '#92400e', marginBottom: '10px', fontWeight: 600 }}>
+                Similar brand found - did you mean:
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {brandMatch.suggestions.map(suggestion => (
@@ -552,12 +567,13 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
                       setBrandMatch({ ...brandMatch, matchType: 'exact' });
                     }}
                     style={{
-                      padding: '6px 12px',
+                      padding: '8px 14px',
                       background: '#fff',
-                      border: '1px solid #d97706',
+                      border: '2px solid #d97706',
                       borderRadius: '6px',
                       cursor: 'pointer',
-                      fontSize: '13px',
+                      fontSize: '14px',
+                      fontWeight: 500,
                       color: '#92400e',
                     }}
                   >

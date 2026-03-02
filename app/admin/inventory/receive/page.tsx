@@ -124,14 +124,23 @@ export default function ReceiveItemsPage() {
       formData.append('folder', 'receipts');
 
       const token = sessionStorage.getItem('adminToken');
+      console.log('[Receipt Upload] Token present:', !!token);
+
+      if (!token) {
+        alert('Session expired. Please log in again.');
+        setReceiptUploading(false);
+        return;
+      }
+
       const uploadRes = await fetch('/api/admin/upload', {
         method: 'POST',
         headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: formData,
       });
       const uploadData = await uploadRes.json();
+      console.log('[Receipt Upload] Response:', uploadData);
 
       if (uploadData.url) {
         setReceiptImageUrl(uploadData.url);
@@ -168,7 +177,12 @@ export default function ReceiveItemsPage() {
         setStep('verify');
       } else {
         console.error('Upload failed:', uploadData);
-        alert(uploadData.error || uploadData.hint || 'Failed to upload receipt');
+        // Check for auth error specifically
+        if (uploadData.error?.includes('token') || uploadData.error?.includes('expired') || uploadData.error?.includes('authorization')) {
+          alert('Session expired. Please log out and log back in.');
+        } else {
+          alert(uploadData.error || uploadData.hint || 'Failed to upload receipt');
+        }
       }
     } catch (err) {
       console.error('Error uploading receipt:', err);
