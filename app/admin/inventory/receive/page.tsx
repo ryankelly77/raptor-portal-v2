@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-E';
+const BUILD_VERSION = 'v2024-MAR02-F';
 
 interface ErrorInfo {
   message: string;
@@ -499,12 +499,13 @@ export default function ReceiveItemsPage() {
     ));
 
     // Update or add to scanned items
+    const itemQty = aiItem.quantity || 1; // Ensure at least 1
     const existingItem = items.find(i => i.productId === newProduct.id);
     if (existingItem) {
       // Update quantity
       setItems(prev => prev.map(i =>
         i.productId === newProduct.id
-          ? { ...i, quantity: i.quantity + aiItem.quantity, unitCost: aiItem.price.toFixed(2) }
+          ? { ...i, quantity: i.quantity + itemQty, unitCost: aiItem.price.toFixed(2) }
           : i
       ));
     } else {
@@ -514,7 +515,7 @@ export default function ReceiveItemsPage() {
         name: newProduct.name,
         brand: newProduct.brand,
         category: newProduct.category,
-        quantity: aiItem.quantity,
+        quantity: itemQty,
         unitCost: aiItem.price.toFixed(2),
         productId: newProduct.id,
         isNew: false,
@@ -612,13 +613,14 @@ export default function ReceiveItemsPage() {
         // Calculate unit quantities and costs
         // If item has units_per_package > 1, convert packages to individual units
         const unitsPerPkg = item.units_per_package || 1;
-        const totalUnits = item.quantity * unitsPerPkg; // e.g., 1 package × 6 units = 6 units
+        const packageQty = item.quantity || 1; // Ensure at least 1 package
+        const totalUnits = packageQty * unitsPerPkg; // e.g., 1 package × 6 units = 6 units
         const packagePrice = item.unitCost ? parseFloat(item.unitCost) : null;
         const perUnitCost = packagePrice && unitsPerPkg > 1
           ? Math.round((packagePrice / unitsPerPkg) * 100) / 100 // e.g., $5.48 / 6 = $0.91
           : packagePrice;
 
-        console.log('[Receive] Item:', item.name, '| Packages:', item.quantity, '| Units/pkg:', unitsPerPkg, '| Total units:', totalUnits, '| Package price:', packagePrice, '| Per-unit cost:', perUnitCost);
+        console.log('[Receive] Item:', item.name, '| Packages:', packageQty, '| Units/pkg:', unitsPerPkg, '| Total units:', totalUnits, '| Package price:', packagePrice, '| Per-unit cost:', perUnitCost);
 
         // Create purchase item with per-unit cost (store individual units)
         const purchaseItemRes = await adminFetch('/api/admin/crud', {
@@ -649,10 +651,10 @@ export default function ReceiveItemsPage() {
             action: 'create',
             data: {
               product_id: productId,
-              quantity: item.quantity, // Packages (dashboard multiplies by units_per_package)
+              quantity: packageQty, // Packages (dashboard multiplies by units_per_package)
               movement_type: 'purchase_in',
               moved_by: purchasedBy,
-              notes: `Received from ${storeName}${unitsPerPkg > 1 ? ` (${item.quantity} pkg × ${unitsPerPkg} = ${totalUnits} units)` : ''}`,
+              notes: `Received from ${storeName}${unitsPerPkg > 1 ? ` (${packageQty} pkg × ${unitsPerPkg} = ${totalUnits} units)` : ''}`,
             },
           }),
         });
@@ -663,7 +665,7 @@ export default function ReceiveItemsPage() {
           throw new Error(`Failed to create movement: ${errData.error || 'Unknown error'}`);
         } else {
           const movementData = await movementRes.json();
-          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', item.quantity, 'pkgs (', totalUnits, 'units)');
+          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', packageQty, 'pkgs (', totalUnits, 'units)');
         }
       }
 
@@ -1000,7 +1002,7 @@ export default function ReceiveItemsPage() {
                                         name: product.name,
                                         brand: product.brand,
                                         category: product.category,
-                                        quantity: aiItem.quantity,
+                                        quantity: aiItem.quantity || 1, // Ensure at least 1
                                         unitCost: aiItem.price.toFixed(2),
                                         productId: product.id,
                                         isNew: false,
@@ -1012,7 +1014,7 @@ export default function ReceiveItemsPage() {
                                         package_name: product.package_name || 'each',
                                       };
                                       setItems(prev => [...prev, newItem]);
-                                      console.log('[Accept] Added new item:', product.name);
+                                      console.log('[Accept] Added new item:', product.name, 'qty:', aiItem.quantity || 1);
                                     } else {
                                       console.log('[Accept] Skipped duplicate:', product.name);
                                     }
