@@ -202,15 +202,16 @@ export default function InventoryPage() {
         const purchase = purchasesMap.get(purchaseItem.purchase_id) || null;
         const movements = movementsByPurchaseItem.get(purchaseItem.id) || [];
 
-        // Calculate quantities
+        // Calculate quantities (movements store packages, multiply by units_per_package)
+        const unitsPerPkg = product.units_per_package || 1;
         let restockedQty = 0;
         let discardedQty = 0;
 
         for (const m of movements) {
           if (m.movement_type === 'restock_out') {
-            restockedQty += Math.abs(m.quantity);
+            restockedQty += Math.abs(m.quantity) * unitsPerPkg;
           } else if (m.movement_type === 'shrinkage') {
-            discardedQty += Math.abs(m.quantity);
+            discardedQty += Math.abs(m.quantity);  // Shrinkage is already in units
           }
         }
 
@@ -281,15 +282,17 @@ export default function InventoryPage() {
       }
 
       // Also calculate in-machine quantities from movements
-      // Note: All movements now store quantities in UNITS (not packages)
+      // Note: Movements store packages, multiply by units_per_package
       const productInMachine = new Map<string, number>();
       for (const m of movementsList) {
+        const product = productsMap.get(m.product_id);
+        const unitsPerPkg = product?.units_per_package || 1;
         const current = productInMachine.get(m.product_id) || 0;
 
         if (m.movement_type === 'restock_in') {
-          productInMachine.set(m.product_id, current + m.quantity);
+          productInMachine.set(m.product_id, current + (m.quantity * unitsPerPkg));
         } else if (m.movement_type === 'sold' || m.movement_type === 'shrinkage') {
-          productInMachine.set(m.product_id, current - m.quantity);
+          productInMachine.set(m.product_id, current - m.quantity); // These are in units
         }
       }
 
