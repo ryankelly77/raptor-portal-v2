@@ -33,8 +33,14 @@ const BARCODE_FORMATS = [
   'itf', 'codabar', 'data_matrix', 'qr_code'
 ];
 
+// Scanner settings
+const SCAN_INTERVAL_MS = 100; // 10fps instead of requestAnimationFrame
+const COOLDOWN_MS = 1500; // 1.5 second cooldown after successful scan
+const CONSECUTIVE_FRAMES_REQUIRED = 3; // Same barcode must appear 3 times
+const SUCCESS_OVERLAY_MS = 1000; // Green overlay duration
+
 export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeScannerProps) {
-  const [status, setStatus] = useState<'initializing' | 'scanning' | 'error' | 'success'>('initializing');
+  const [status, setStatus] = useState<'initializing' | 'scanning' | 'cooldown' | 'error' | 'success'>('initializing');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState('');
@@ -47,10 +53,13 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetector | null>(null);
   const scanningRef = useRef<boolean>(false);
-  const animationRef = useRef<number | null>(null);
+  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const zxingReaderRef = useRef<any>(null);
   const lastScanTimeRef = useRef<number>(0);
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounce state - track consecutive detections
+  const consecutiveDetectionsRef = useRef<{ barcode: string; count: number }>({ barcode: '', count: 0 });
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -62,9 +71,9 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
       initTimeoutRef.current = null;
     }
 
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
     }
 
     if (streamRef.current) {
@@ -85,17 +94,38 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     }
   }, []);
 
-  // Handle successful scan
+  // Handle successful scan with debounce
   const handleDetection = useCallback((barcode: string) => {
-    // Debounce - prevent duplicate scans within 1 second
+    // Check cooldown period
     const now = Date.now();
-    if (now - lastScanTimeRef.current < 1000) return;
-    if (barcode === lastScanned) return;
+    if (now - lastScanTimeRef.current < COOLDOWN_MS) {
+      return;
+    }
 
-    console.log('[Scanner] Detected barcode:', barcode);
+    // Debounce: require same barcode on consecutive frames
+    if (consecutiveDetectionsRef.current.barcode === barcode) {
+      consecutiveDetectionsRef.current.count++;
+    } else {
+      consecutiveDetectionsRef.current = { barcode, count: 1 };
+    }
+
+    // Not enough consecutive detections yet
+    if (consecutiveDetectionsRef.current.count < CONSECUTIVE_FRAMES_REQUIRED) {
+      return;
+    }
+
+    // Reset consecutive counter
+    consecutiveDetectionsRef.current = { barcode: '', count: 0 };
+
+    // Prevent duplicate scans of same item
+    if (barcode === lastScanned && now - lastScanTimeRef.current < 5000) {
+      return;
+    }
+
+    console.log('[Scanner] Confirmed barcode:', barcode);
     lastScanTimeRef.current = now;
     setLastScanned(barcode);
-    setStatus('success');
+    setStatus('cooldown');
     setShowFlash(true);
 
     // Vibrate on success
@@ -119,15 +149,17 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
       // Audio not available
     }
 
-    // Hide flash after animation
-    setTimeout(() => setShowFlash(false), 300);
+    // Hide flash after SUCCESS_OVERLAY_MS
+    setTimeout(() => {
+      setShowFlash(false);
+      setStatus('scanning');
+    }, SUCCESS_OVERLAY_MS);
 
     // Pass barcode to parent
-    cleanup();
     onScan(barcode);
-  }, [lastScanned, cleanup, onScan]);
+  }, [lastScanned, onScan]);
 
-  // Native BarcodeDetector scanning loop
+  // Native BarcodeDetector scanning loop - using setInterval for controlled rate
   const startNativeScanning = useCallback(() => {
     if (!videoRef.current || !canvasRef.current || !detectorRef.current) {
       console.log('[Scanner] Cannot start native scanning - missing refs');
@@ -140,14 +172,14 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     if (!ctx) return;
 
     scanningRef.current = true;
-    console.log('[Scanner] Starting native scanning loop');
+    console.log('[Scanner] Starting native scanning loop at', 1000 / SCAN_INTERVAL_MS, 'fps');
 
-    const scan = async () => {
+    // Use setInterval instead of requestAnimationFrame for controlled rate
+    scanIntervalRef.current = setInterval(async () => {
       if (!scanningRef.current) return;
 
       // Wait for video to have dimensions
       if (!video.videoWidth || !video.videoHeight) {
-        animationRef.current = requestAnimationFrame(scan);
         return;
       }
 
@@ -160,19 +192,11 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
         const barcodes = await detectorRef.current!.detect(canvas);
         if (barcodes.length > 0) {
           handleDetection(barcodes[0].rawValue);
-          return;
         }
       } catch (e) {
         // Detection error - continue scanning
       }
-
-      // Continue scanning
-      if (scanningRef.current) {
-        animationRef.current = requestAnimationFrame(scan);
-      }
-    };
-
-    scan();
+    }, SCAN_INTERVAL_MS);
   }, [handleDetection]);
 
   // Initialize scanner
@@ -341,13 +365,19 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
         // Store reader reference for cleanup
         zxingReaderRef.current = reader;
 
-        // Start continuous scanning
+        // Start continuous scanning with controlled callback
+        let lastZxingDetection = 0;
         await reader.decodeFromVideoDevice(
           deviceId, // null = default camera (usually back on mobile)
           video,
           (result, error) => {
             if (result) {
-              handleDetection(result.getText());
+              // Throttle ZXing callbacks to match our interval
+              const now = Date.now();
+              if (now - lastZxingDetection >= SCAN_INTERVAL_MS) {
+                lastZxingDetection = now;
+                handleDetection(result.getText());
+              }
             }
             // Errors are normal when no barcode is visible - ignore them
           }
@@ -384,8 +414,8 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   const handleManualSubmit = () => {
     const barcode = manualBarcode.trim();
     if (barcode.length >= 6) {
-      cleanup();
       onScan(barcode);
+      setManualBarcode('');
     }
   };
 
@@ -488,18 +518,39 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           </div>
         )}
 
-        {/* Success flash overlay */}
+        {/* Success flash overlay - extended duration */}
         {showFlash && (
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'rgba(34, 197, 94, 0.3)',
+            background: 'rgba(34, 197, 94, 0.4)',
             pointerEvents: 'none',
-          }} />
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'opacity 0.3s ease-out',
+          }}>
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.8)',
+              color: '#22c55e',
+              padding: '16px 32px',
+              borderRadius: '12px',
+              fontWeight: 700,
+              fontSize: '18px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Scanned!
+            </div>
+          </div>
         )}
 
         {/* Scanning overlay */}
-        {status === 'scanning' && (
+        {(status === 'scanning' || status === 'cooldown') && !showFlash && (
           <>
             {/* Top instruction bar */}
             <div style={{
@@ -562,11 +613,11 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
               <span style={{
                 width: '12px',
                 height: '12px',
-                background: '#22c55e',
+                background: status === 'cooldown' ? '#f59e0b' : '#22c55e',
                 borderRadius: '50%',
-                animation: 'pulse 1s infinite',
+                animation: status === 'cooldown' ? 'none' : 'pulse 1s infinite',
               }} />
-              <span>Scanning...</span>
+              <span>{status === 'cooldown' ? 'Ready for next...' : 'Scanning...'}</span>
             </div>
           </>
         )}

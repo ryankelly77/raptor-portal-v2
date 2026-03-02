@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-M';
+const BUILD_VERSION = 'v2024-MAR01-N';
 
 interface ErrorInfo {
   message: string;
@@ -48,7 +48,8 @@ interface AIParsedItem {
   // UI state
   accepted?: boolean;
   skipped?: boolean;
-  linkedBarcode?: string;
+  editingNewProduct?: boolean;
+  changingMatch?: boolean;
 }
 
 interface ReceiptAlias {
@@ -57,6 +58,17 @@ interface ReceiptAlias {
   receipt_text: string;
   product_id: string;
 }
+
+interface Product {
+  id: string;
+  name: string;
+  brand: string | null;
+  barcode: string;
+  category: string;
+}
+
+// Category options for new products
+const CATEGORY_OPTIONS = ['Beverage', 'Snack', 'Meal', 'Candy', 'Other'];
 
 export default function ReceiveItemsPage() {
   const router = useRouter();
@@ -67,6 +79,9 @@ export default function ReceiveItemsPage() {
   // Scanned items
   const [items, setItems] = useState<ScannedItem[]>([]);
   const [currentBarcode, setCurrentBarcode] = useState<string | null>(null);
+
+  // All products from catalog (for product picker)
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
 
   // Receipt data
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
@@ -81,9 +96,10 @@ export default function ReceiveItemsPage() {
   const [aiSubtotal, setAiSubtotal] = useState<number | null>(null);
   const [aiNotes, setAiNotes] = useState<string>('');
 
-  // Purchase info
-  const [storeName, setStoreName] = useState("Sam's");
-  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
+  // AI-detected store info (editable)
+  const [storeName, setStoreName] = useState<string>('');
+  const [storeNumber, setStoreNumber] = useState<string>('');
+  const [purchaseDate, setPurchaseDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [purchasedBy, setPurchasedBy] = useState('Cristian Kelly');
 
   // Final state
@@ -94,9 +110,29 @@ export default function ReceiveItemsPage() {
   // Alias system
   const [aliases, setAliases] = useState<ReceiptAlias[]>([]);
   const [aliasesLoaded, setAliasesLoaded] = useState(false);
-  const [savingAlias, setSavingAlias] = useState<string | null>(null);
+
+  // Toast notifications
+  const [toast, setToast] = useState<string | null>(null);
+
+  // New product form state
+  const [newProductForm, setNewProductForm] = useState<{
+    brand: string;
+    name: string;
+    category: string;
+    barcode: string;
+    price: string;
+  }>({ brand: '', name: '', category: '', barcode: '', price: '' });
+
+  // Product search for "Change Match"
+  const [productSearchQuery, setProductSearchQuery] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Show toast message
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Load aliases on mount
   const loadAliases = useCallback(async () => {
@@ -122,8 +158,7 @@ export default function ReceiveItemsPage() {
   }, [loadAliases]);
 
   // Save a new alias
-  const saveAlias = async (receiptText: string, productId: string) => {
-    setSavingAlias(receiptText);
+  const saveAlias = async (receiptText: string, productId: string, productName: string) => {
     try {
       const res = await adminFetch('/api/admin/crud', {
         method: 'POST',
@@ -131,7 +166,7 @@ export default function ReceiveItemsPage() {
           table: 'receipt_aliases',
           action: 'create',
           data: {
-            store_name: storeName,
+            store_name: storeName || null,
             receipt_text: receiptText.trim().toUpperCase(),
             product_id: productId,
           },
@@ -141,11 +176,10 @@ export default function ReceiveItemsPage() {
       if (res.ok && data.data) {
         setAliases([...aliases, data.data]);
         console.log('[Alias] Saved:', receiptText, '->', productId);
+        showToast(`Learned: "${receiptText}" = ${productName} at ${storeName || 'any store'}`);
       }
     } catch (err) {
       console.error('[Alias] Save error:', err);
-    } finally {
-      setSavingAlias(null);
     }
   };
 
@@ -252,18 +286,18 @@ export default function ReceiveItemsPage() {
       setReceiptImage(imageUrl);
       console.log('[AI Vision] Receipt uploaded:', imageUrl);
 
-      // 2. Build product catalog from scanned items + all products
+      // 2. Fetch all products for the catalog
       setAiStatus('AI is reading your receipt...');
 
-      // Fetch all products for the catalog
       const productsRes = await adminFetch('/api/admin/crud', {
         method: 'POST',
         body: JSON.stringify({ table: 'products', action: 'read' }),
       });
       const productsData = await productsRes.json();
-      const allProducts = productsData.data || [];
+      const fetchedProducts: Product[] = productsData.data || [];
+      setAllProducts(fetchedProducts);
 
-      const products = allProducts.map((p: any) => ({
+      const products = fetchedProducts.map((p: Product) => ({
         id: p.id,
         brand: p.brand,
         name: p.name,
@@ -279,7 +313,6 @@ export default function ReceiveItemsPage() {
         body: JSON.stringify({
           imageUrl,
           products,
-          storeName
         }),
       });
 
@@ -288,14 +321,19 @@ export default function ReceiveItemsPage() {
       if (res.ok && data.success) {
         console.log('[AI Vision] Success:', data.items?.length, 'items parsed');
 
+        // Set AI-detected store info
+        if (data.store_name) setStoreName(data.store_name);
+        if (data.store_number) setStoreNumber(data.store_number);
+        if (data.purchase_date) setPurchaseDate(data.purchase_date);
+
         // Apply alias overrides
-        const storeAliases = aliases.filter(a => !a.store_name || a.store_name === storeName);
+        const storeAliases = aliases.filter(a => !a.store_name || a.store_name === data.store_name);
         const parsedItems: AIParsedItem[] = (data.items || []).map((item: AIParsedItem) => {
           // Check aliases first
           for (const alias of storeAliases) {
             if (item.receipt_text.toUpperCase().includes(alias.receipt_text.toUpperCase())) {
               // Found alias match - override AI's product_id
-              const aliasProduct = allProducts.find((p: any) => p.id === alias.product_id);
+              const aliasProduct = fetchedProducts.find((p: Product) => p.id === alias.product_id);
               if (aliasProduct) {
                 return {
                   ...item,
@@ -342,14 +380,141 @@ export default function ReceiveItemsPage() {
     }
   };
 
-  // Calculate totals
-  const calculatedTotal = items.reduce((sum, item) => {
+  // Calculate totals with proper decimal handling (avoid floating point issues)
+  const calculatedTotal = Math.round(items.reduce((sum, item) => {
     const price = parseFloat(item.unitCost) || 0;
-    return sum + (price * item.quantity);
-  }, 0);
+    return sum + (price * item.quantity * 100);
+  }, 0)) / 100;
 
   const receiptTotalNum = parseFloat(receiptTotal) || 0;
-  const difference = Math.abs(receiptTotalNum - calculatedTotal);
+  const difference = Math.abs(Math.round((receiptTotalNum - calculatedTotal) * 100) / 100);
+
+  // Create new product and add to items
+  const handleCreateNewProduct = async (aiItem: AIParsedItem) => {
+    try {
+      // Create product
+      const prodRes = await adminFetch('/api/admin/crud', {
+        method: 'POST',
+        body: JSON.stringify({
+          table: 'products',
+          action: 'create',
+          data: {
+            barcode: newProductForm.barcode || `NEW-${Date.now()}`,
+            name: newProductForm.name,
+            brand: newProductForm.brand || null,
+            category: newProductForm.category || 'Other',
+            default_price: parseFloat(newProductForm.price) || null,
+          },
+        }),
+      });
+      const prodData = await prodRes.json();
+
+      if (!prodRes.ok || !prodData.data?.id) {
+        throw new Error(prodData.error || 'Failed to create product');
+      }
+
+      const newProductId = prodData.data.id;
+      const newProduct: Product = prodData.data;
+
+      // Add to allProducts
+      setAllProducts(prev => [...prev, newProduct]);
+
+      // Add to scanned items
+      const newItem: ScannedItem = {
+        barcode: newProduct.barcode,
+        name: newProduct.name,
+        brand: newProduct.brand,
+        category: newProduct.category,
+        quantity: aiItem.quantity,
+        unitCost: newProductForm.price,
+        productId: newProductId,
+        isNew: false,
+        matchConfidence: 'ai-high',
+        matchedOcrLine: aiItem.receipt_text,
+      };
+      setItems(prev => [...prev, newItem]);
+
+      // Save alias
+      await saveAlias(aiItem.receipt_text, newProductId, newProduct.name);
+
+      // Update AI item as accepted
+      setAiParsedItems(prev => prev.map(item =>
+        item === aiItem ? { ...item, accepted: true, editingNewProduct: false, product_id: newProductId } : item
+      ));
+
+      // Reset form
+      setNewProductForm({ brand: '', name: '', category: '', barcode: '', price: '' });
+
+      showToast(`Created: ${newProduct.name}`);
+
+    } catch (err) {
+      console.error('[CreateProduct] Error:', err);
+      showToast('Failed to create product');
+    }
+  };
+
+  // Change match for an AI item
+  const handleChangeMatch = async (aiItem: AIParsedItem, newProduct: Product) => {
+    const oldProductId = aiItem.product_id;
+
+    // Update the AI item
+    setAiParsedItems(prev => prev.map(item =>
+      item === aiItem ? {
+        ...item,
+        product_id: newProduct.id,
+        is_new_product: false,
+        confidence: 'high' as const,
+        reasoning: `Manually matched to ${newProduct.name}`,
+        changingMatch: false,
+        accepted: true,
+      } : item
+    ));
+
+    // Update or add to scanned items
+    const existingItem = items.find(i => i.productId === newProduct.id);
+    if (existingItem) {
+      // Update quantity
+      setItems(prev => prev.map(i =>
+        i.productId === newProduct.id
+          ? { ...i, quantity: i.quantity + aiItem.quantity, unitCost: aiItem.price.toFixed(2) }
+          : i
+      ));
+    } else {
+      // Add new item
+      const newItem: ScannedItem = {
+        barcode: newProduct.barcode,
+        name: newProduct.name,
+        brand: newProduct.brand,
+        category: newProduct.category,
+        quantity: aiItem.quantity,
+        unitCost: aiItem.price.toFixed(2),
+        productId: newProduct.id,
+        isNew: false,
+        matchConfidence: 'ai-high',
+        matchedOcrLine: aiItem.receipt_text,
+      };
+      setItems(prev => [...prev, newItem]);
+    }
+
+    // Remove from old product if it was matched
+    if (oldProductId && oldProductId !== newProduct.id) {
+      setItems(prev => prev.filter(i => i.productId !== oldProductId || i.matchedOcrLine !== aiItem.receipt_text));
+    }
+
+    // Save alias for the correction
+    await saveAlias(aiItem.receipt_text, newProduct.id, newProduct.name);
+
+    setProductSearchQuery('');
+  };
+
+  // Filter products for search
+  const filteredProducts = productSearchQuery.length >= 2
+    ? allProducts.filter(p =>
+        p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
+        (p.brand && p.brand.toLowerCase().includes(productSearchQuery.toLowerCase())) ||
+        p.barcode.includes(productSearchQuery)
+      ).slice(0, 10)
+    : [];
 
   // Save everything
   const handleSave = async () => {
@@ -370,7 +535,7 @@ export default function ReceiveItemsPage() {
           action: 'create',
           data: {
             purchased_by: purchasedBy,
-            store_name: storeName,
+            store_name: storeName + (storeNumber ? ` ${storeNumber}` : ''),
             purchase_date: purchaseDate,
             receipt_image_url: receiptImageUrl || receiptImage,
             receipt_total: receiptTotalNum || calculatedTotal,
@@ -469,6 +634,27 @@ export default function ReceiveItemsPage() {
           {BUILD_VERSION} | Step: {step} | Items: {totalItemCount}
         </div>
 
+        {/* Toast notification */}
+        {toast && (
+          <div style={{
+            position: 'fixed',
+            bottom: '80px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#1f2937',
+            color: '#fff',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            zIndex: 9999,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            fontSize: '14px',
+            maxWidth: '90%',
+            textAlign: 'center',
+          }}>
+            {toast}
+          </div>
+        )}
+
         {/* Error display */}
         {error && (
           <div style={{ background: '#fef2f2', border: '2px solid #dc2626', color: '#dc2626', padding: '16px', borderRadius: '8px', marginBottom: '16px', fontFamily: 'monospace', fontSize: '13px' }}>
@@ -517,7 +703,7 @@ export default function ReceiveItemsPage() {
           </div>
         )}
 
-        {/* STEP 2: CAPTURE RECEIPT */}
+        {/* STEP 2: CAPTURE RECEIPT - Simplified, no store selector */}
         {step === 'receipt' && (
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '16px' }}>Capture Receipt</h2>
@@ -549,24 +735,7 @@ export default function ReceiveItemsPage() {
               </div>
             )}
 
-            {/* Store info */}
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>Store</label>
-              <select value={storeName} onChange={(e) => setStoreName(e.target.value)} className={styles.formSelect}>
-                <option value="Sam's">Sam&apos;s Club</option>
-                <option value="Costco">Costco</option>
-                <option value="Walmart">Walmart</option>
-                <option value="Amazon">Amazon</option>
-                <option value="HEB">HEB</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>Purchase Date</label>
-              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className={styles.formInput} />
-            </div>
-
+            {/* Purchased By - keep this since AI can't detect it */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>Purchased By</label>
               <select value={purchasedBy} onChange={(e) => setPurchasedBy(e.target.value)} className={styles.formSelect}>
@@ -588,6 +757,40 @@ export default function ReceiveItemsPage() {
         {step === 'reconcile' && (
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '16px' }}>Reconcile Prices</h2>
+
+            {/* AI-detected Store Info (editable) */}
+            {(storeName || purchaseDate) && (
+              <div style={{ padding: '12px 16px', background: '#f0f9ff', border: '1px solid #0ea5e9', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600 }}>Store:</span>
+                    <input
+                      type="text"
+                      value={storeName}
+                      onChange={(e) => setStoreName(e.target.value)}
+                      style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', width: '120px' }}
+                    />
+                    {storeNumber && (
+                      <input
+                        type="text"
+                        value={storeNumber}
+                        onChange={(e) => setStoreNumber(e.target.value)}
+                        style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', width: '80px' }}
+                        placeholder="#"
+                      />
+                    )}
+                    <span style={{ color: '#6b7280' }}>—</span>
+                    <span style={{ fontWeight: 600 }}>Date:</span>
+                    <input
+                      type="date"
+                      value={purchaseDate}
+                      onChange={(e) => setPurchaseDate(e.target.value)}
+                      style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* AI Status */}
             {aiStatus && (
@@ -612,7 +815,7 @@ export default function ReceiveItemsPage() {
                     <span style={{ color: '#22c55e' }}>✓</span> Matched to Catalog ({matchedItems.length})
                   </h3>
                   {matchedItems.map((aiItem, idx) => {
-                    const product = items.find(i => i.productId === aiItem.product_id);
+                    const product = allProducts.find(p => p.id === aiItem.product_id);
                     const bgColor = aiItem.confidence === 'high' ? '#f0fdf4' : aiItem.confidence === 'medium' ? '#fefce8' : '#fef2f2';
                     const borderColor = aiItem.confidence === 'high' ? '#22c55e' : aiItem.confidence === 'medium' ? '#facc15' : '#f87171';
                     const labelColor = aiItem.confidence === 'high' ? '#16a34a' : aiItem.confidence === 'medium' ? '#ca8a04' : '#dc2626';
@@ -624,77 +827,135 @@ export default function ReceiveItemsPage() {
 
                     return (
                       <div key={idx} style={{ padding: '12px', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '10px', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        {/* Change Match UI */}
+                        {aiItem.changingMatch ? (
                           <div>
-                            <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', marginBottom: '4px' }}>
-                              &quot;{aiItem.receipt_text}&quot; →
+                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+                              Change match for: &quot;{aiItem.receipt_text}&quot;
                             </div>
-                            {product?.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{product.brand}</div>}
-                            <div style={{ fontWeight: 600 }}>{product?.name || aiItem.parsed_name}</div>
-                            {aiItem.reasoning && (
-                              <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '4px', fontStyle: 'italic' }}>
-                                AI: {aiItem.reasoning}
+                            <input
+                              type="text"
+                              placeholder="Search products..."
+                              value={productSearchQuery}
+                              onChange={(e) => setProductSearchQuery(e.target.value)}
+                              className={styles.formInput}
+                              style={{ marginBottom: '8px' }}
+                              autoFocus
+                            />
+                            {filteredProducts.length > 0 && (
+                              <div style={{ maxHeight: '200px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '8px' }}>
+                                {filteredProducts.map(p => (
+                                  <button
+                                    key={p.id}
+                                    onClick={() => handleChangeMatch(aiItem, p)}
+                                    style={{ width: '100%', textAlign: 'left', padding: '10px 12px', background: 'none', border: 'none', borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                                  >
+                                    {p.brand && <span style={{ fontWeight: 700, fontSize: '10px', color: '#FF580F', textTransform: 'uppercase' }}>{p.brand} </span>}
+                                    <span style={{ fontWeight: 500 }}>{p.name}</span>
+                                  </button>
+                                ))}
                               </div>
                             )}
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <span style={{ fontSize: '12px', color: labelColor, fontWeight: 600 }}>{label}</span>
-                            <div style={{ fontSize: '18px', fontWeight: 700, marginTop: '4px' }}>${aiItem.price.toFixed(2)}</div>
-                            {aiItem.quantity > 1 && <div style={{ fontSize: '11px', color: '#6b7280' }}>x{aiItem.quantity}</div>}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                          <button
-                            onClick={() => {
-                              setAiParsedItems(prev => prev.map((item, i) =>
-                                i === aiParsedItems.indexOf(aiItem) ? { ...item, accepted: true } : item
-                              ));
-                              // Update the scanned item with the price
-                              if (product) {
-                                setItems(prev => prev.map(i =>
-                                  i.productId === aiItem.product_id
-                                    ? { ...i, unitCost: aiItem.price.toFixed(2), quantity: aiItem.quantity, matchedOcrLine: aiItem.receipt_text, matchConfidence: `ai-${aiItem.confidence}` as const }
-                                    : i
+                            <button
+                              onClick={() => {
+                                setAiParsedItems(prev => prev.map(item =>
+                                  item === aiItem ? { ...item, changingMatch: false } : item
                                 ));
-                              } else {
-                                // Product matched but not in scanned items - add it
-                                const newItem: ScannedItem = {
-                                  barcode: aiItem.barcode || `AI-${Date.now()}`,
-                                  name: aiItem.parsed_name,
-                                  brand: null,
-                                  category: 'Uncategorized',
-                                  quantity: aiItem.quantity,
-                                  unitCost: aiItem.price.toFixed(2),
-                                  productId: aiItem.product_id || undefined,
-                                  isNew: false,
-                                  matchConfidence: `ai-${aiItem.confidence}` as const,
-                                  matchedOcrLine: aiItem.receipt_text,
-                                };
-                                setItems(prev => [...prev, newItem]);
-                              }
-                              // Save alias if not exists
-                              if (!aliasExists && aiItem.product_id) {
-                                saveAlias(aiItem.receipt_text, aiItem.product_id);
-                              }
-                            }}
-                            disabled={aiItem.accepted}
-                            style={{ flex: 1, padding: '8px 12px', background: aiItem.accepted ? '#d1fae5' : '#22c55e', color: aiItem.accepted ? '#065f46' : '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: aiItem.accepted ? 'default' : 'pointer' }}
-                          >
-                            {aiItem.accepted ? '✓ Accepted' : 'Accept'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setAiParsedItems(prev => prev.map((item, i) =>
-                                i === aiParsedItems.indexOf(aiItem) ? { ...item, skipped: true } : item
-                              ));
-                            }}
-                            disabled={aiItem.accepted || aiItem.skipped}
-                            style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
-                          >
-                            Skip
-                          </button>
-                        </div>
+                                setProductSearchQuery('');
+                              }}
+                              style={{ padding: '8px 16px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <div>
+                                <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', marginBottom: '4px' }}>
+                                  &quot;{aiItem.receipt_text}&quot; →
+                                </div>
+                                {product?.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{product.brand}</div>}
+                                <div style={{ fontWeight: 600 }}>{product?.name || aiItem.parsed_name}</div>
+                                {aiItem.reasoning && (
+                                  <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '4px', fontStyle: 'italic' }}>
+                                    AI: {aiItem.reasoning}
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <span style={{ fontSize: '12px', color: labelColor, fontWeight: 600 }}>{label}</span>
+                                <div style={{ fontSize: '18px', fontWeight: 700, marginTop: '4px' }}>${aiItem.price.toFixed(2)}</div>
+                                {aiItem.quantity > 1 && <div style={{ fontSize: '11px', color: '#6b7280' }}>x{aiItem.quantity}</div>}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                              <button
+                                onClick={() => {
+                                  setAiParsedItems(prev => prev.map((item, i) =>
+                                    i === aiParsedItems.indexOf(aiItem) ? { ...item, accepted: true } : item
+                                  ));
+                                  // Update the scanned item with the price
+                                  const existingItem = items.find(i => i.productId === aiItem.product_id);
+                                  if (existingItem) {
+                                    setItems(prev => prev.map(i =>
+                                      i.productId === aiItem.product_id
+                                        ? { ...i, unitCost: aiItem.price.toFixed(2), quantity: aiItem.quantity, matchedOcrLine: aiItem.receipt_text, matchConfidence: `ai-${aiItem.confidence}` as const }
+                                        : i
+                                    ));
+                                  } else if (product) {
+                                    // Add to items
+                                    const newItem: ScannedItem = {
+                                      barcode: product.barcode,
+                                      name: product.name,
+                                      brand: product.brand,
+                                      category: product.category,
+                                      quantity: aiItem.quantity,
+                                      unitCost: aiItem.price.toFixed(2),
+                                      productId: product.id,
+                                      isNew: false,
+                                      matchConfidence: `ai-${aiItem.confidence}` as const,
+                                      matchedOcrLine: aiItem.receipt_text,
+                                    };
+                                    setItems(prev => [...prev, newItem]);
+                                  }
+                                  // Save alias if not exists
+                                  if (!aliasExists && aiItem.product_id && product) {
+                                    saveAlias(aiItem.receipt_text, aiItem.product_id, product.name);
+                                  }
+                                }}
+                                disabled={aiItem.accepted}
+                                style={{ flex: 1, padding: '8px 12px', background: aiItem.accepted ? '#d1fae5' : '#22c55e', color: aiItem.accepted ? '#065f46' : '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: aiItem.accepted ? 'default' : 'pointer' }}
+                              >
+                                {aiItem.accepted ? '✓ Accepted' : 'Accept'}
+                              </button>
+                              {!aiItem.accepted && (
+                                <button
+                                  onClick={() => {
+                                    setAiParsedItems(prev => prev.map(item =>
+                                      item === aiItem ? { ...item, changingMatch: true } : item
+                                    ));
+                                  }}
+                                  style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
+                                >
+                                  Change
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setAiParsedItems(prev => prev.map((item, i) =>
+                                    i === aiParsedItems.indexOf(aiItem) ? { ...item, skipped: true } : item
+                                  ));
+                                }}
+                                disabled={aiItem.accepted || aiItem.skipped}
+                                style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
+                              >
+                                Skip
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}
@@ -704,7 +965,7 @@ export default function ReceiveItemsPage() {
 
             {/* Section 2: New Products Detected (blue) */}
             {(() => {
-              const newProducts = aiParsedItems.filter(i => i.is_new_product && !i.skipped);
+              const newProducts = aiParsedItems.filter(i => i.is_new_product && !i.skipped && !i.accepted);
               return newProducts.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
                   <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -712,71 +973,222 @@ export default function ReceiveItemsPage() {
                   </h3>
                   {newProducts.map((aiItem, idx) => (
                     <div key={idx} style={{ padding: '12px', background: '#dbeafe', border: '1px solid #3b82f6', borderRadius: '10px', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      {/* Inline New Product Form */}
+                      {aiItem.editingNewProduct ? (
                         <div>
-                          <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', marginBottom: '4px' }}>
-                            &quot;{aiItem.receipt_text}&quot;
+                          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                            Adding: &quot;{aiItem.receipt_text}&quot;
                           </div>
-                          {aiItem.suggested_brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#1d4ed8', textTransform: 'uppercase' }}>{aiItem.suggested_brand}</div>}
-                          <div style={{ fontWeight: 600, color: '#1d4ed8' }}>{aiItem.parsed_name}</div>
-                          {aiItem.suggested_category && (
-                            <div style={{ fontSize: '11px', color: '#374151', marginTop: '4px' }}>
-                              Category: {aiItem.suggested_category}
-                            </div>
-                          )}
-                          {aiItem.barcode && (
-                            <div style={{ fontSize: '11px', color: '#374151', marginTop: '4px' }}>
-                              Barcode: <span style={{ fontFamily: 'monospace' }}>{aiItem.barcode}</span>
-                            </div>
-                          )}
-                          {aiItem.reasoning && (
-                            <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '4px', fontStyle: 'italic' }}>
-                              AI: {aiItem.reasoning}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#1d4ed8' }}>${aiItem.price.toFixed(2)}</div>
-                          {aiItem.quantity > 1 && <div style={{ fontSize: '11px', color: '#6b7280' }}>x{aiItem.quantity}</div>}
-                        </div>
-                      </div>
 
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                        <button
-                          onClick={() => {
-                            setAiParsedItems(prev => prev.map((item, i) =>
-                              i === aiParsedItems.indexOf(aiItem) ? { ...item, skipped: true } : item
-                            ));
-                          }}
-                          style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
-                        >
-                          Skip
-                        </button>
-                        <button
-                          style={{ flex: 1, padding: '8px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
-                          onClick={() => {
-                            // Add to scanned items as new product
-                            const newItem: ScannedItem = {
-                              barcode: aiItem.barcode || `NEW-${Date.now()}`,
-                              name: aiItem.parsed_name,
-                              brand: aiItem.suggested_brand,
-                              category: aiItem.suggested_category || 'Uncategorized',
-                              quantity: aiItem.quantity,
-                              unitCost: aiItem.price.toFixed(2),
-                              isNew: true,
-                              matchConfidence: 'ai-high',
-                              matchedOcrLine: aiItem.receipt_text,
-                            };
-                            setItems(prev => [...prev, newItem]);
-                            // Mark as accepted
-                            setAiParsedItems(prev => prev.map((item, i) =>
-                              i === aiParsedItems.indexOf(aiItem) ? { ...item, accepted: true, skipped: false } : item
-                            ));
-                          }}
-                        >
-                          Add to Catalog
-                        </button>
-                      </div>
+                          <div style={{ display: 'grid', gap: '10px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: '#374151' }}>Brand</label>
+                              <input
+                                type="text"
+                                value={newProductForm.brand}
+                                onChange={(e) => setNewProductForm(prev => ({ ...prev, brand: e.target.value }))}
+                                placeholder="e.g., Monster Energy"
+                                className={styles.formInput}
+                                style={{ padding: '8px 10px', fontSize: '14px' }}
+                              />
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: '#374151' }}>Product Name *</label>
+                              <input
+                                type="text"
+                                value={newProductForm.name}
+                                onChange={(e) => setNewProductForm(prev => ({ ...prev, name: e.target.value }))}
+                                placeholder="e.g., Zero Sugar Ultra"
+                                className={styles.formInput}
+                                style={{ padding: '8px 10px', fontSize: '14px' }}
+                              />
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: '#374151' }}>Category</label>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                {CATEGORY_OPTIONS.map(cat => (
+                                  <button
+                                    key={cat}
+                                    onClick={() => setNewProductForm(prev => ({ ...prev, category: cat }))}
+                                    style={{
+                                      padding: '6px 12px',
+                                      background: newProductForm.category === cat ? '#3b82f6' : '#f3f4f6',
+                                      color: newProductForm.category === cat ? '#fff' : '#374151',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      fontWeight: 500,
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {cat}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                              <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: '#374151' }}>Barcode</label>
+                                <input
+                                  type="text"
+                                  value={newProductForm.barcode}
+                                  onChange={(e) => setNewProductForm(prev => ({ ...prev, barcode: e.target.value }))}
+                                  placeholder="Optional"
+                                  className={styles.formInput}
+                                  style={{ padding: '8px 10px', fontSize: '14px' }}
+                                />
+                              </div>
+                              <div style={{ width: '100px' }}>
+                                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: '#374151' }}>Price</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={newProductForm.price}
+                                  onChange={(e) => setNewProductForm(prev => ({ ...prev, price: e.target.value }))}
+                                  className={styles.formInput}
+                                  style={{ padding: '8px 10px', fontSize: '14px' }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                            <button
+                              onClick={() => {
+                                setAiParsedItems(prev => prev.map(item =>
+                                  item === aiItem ? { ...item, editingNewProduct: false } : item
+                                ));
+                                setNewProductForm({ brand: '', name: '', category: '', barcode: '', price: '' });
+                              }}
+                              style={{ padding: '8px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleCreateNewProduct(aiItem)}
+                              disabled={!newProductForm.name.trim()}
+                              style={{ flex: 1, padding: '8px 16px', background: newProductForm.name.trim() ? '#22c55e' : '#d1d5db', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: newProductForm.name.trim() ? 'pointer' : 'not-allowed' }}
+                            >
+                              Save & Match
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <div>
+                              <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', marginBottom: '4px' }}>
+                                &quot;{aiItem.receipt_text}&quot;
+                              </div>
+                              {aiItem.suggested_brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#1d4ed8', textTransform: 'uppercase' }}>{aiItem.suggested_brand}</div>}
+                              <div style={{ fontWeight: 600, color: '#1d4ed8' }}>{aiItem.parsed_name}</div>
+                              {aiItem.suggested_category && (
+                                <div style={{ fontSize: '11px', color: '#374151', marginTop: '4px' }}>
+                                  Category: {aiItem.suggested_category}
+                                </div>
+                              )}
+                              {aiItem.barcode && (
+                                <div style={{ fontSize: '11px', color: '#374151', marginTop: '4px' }}>
+                                  Barcode: <span style={{ fontFamily: 'monospace' }}>{aiItem.barcode}</span>
+                                </div>
+                              )}
+                              {aiItem.reasoning && (
+                                <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '4px', fontStyle: 'italic' }}>
+                                  AI: {aiItem.reasoning}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '18px', fontWeight: 700, color: '#1d4ed8' }}>${aiItem.price.toFixed(2)}</div>
+                              {aiItem.quantity > 1 && <div style={{ fontSize: '11px', color: '#6b7280' }}>x{aiItem.quantity}</div>}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                            <button
+                              onClick={() => {
+                                setAiParsedItems(prev => prev.map(item =>
+                                  item === aiItem ? { ...item, skipped: true } : item
+                                ));
+                              }}
+                              style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
+                            >
+                              Skip
+                            </button>
+                            <button
+                              onClick={() => {
+                                setAiParsedItems(prev => prev.map(item =>
+                                  item === aiItem ? { ...item, changingMatch: true } : item
+                                ));
+                              }}
+                              style={{ padding: '8px 12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}
+                            >
+                              Match Existing
+                            </button>
+                            <button
+                              style={{ flex: 1, padding: '8px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+                              onClick={() => {
+                                // Pre-fill form with AI suggestions
+                                setNewProductForm({
+                                  brand: aiItem.suggested_brand || '',
+                                  name: aiItem.parsed_name || '',
+                                  category: aiItem.suggested_category || '',
+                                  barcode: aiItem.barcode || '',
+                                  price: aiItem.price.toFixed(2),
+                                });
+                                setAiParsedItems(prev => prev.map(item =>
+                                  item === aiItem ? { ...item, editingNewProduct: true } : item
+                                ));
+                              }}
+                            >
+                              Add to Catalog
+                            </button>
+                          </div>
+
+                          {/* Change Match UI for new products */}
+                          {aiItem.changingMatch && (
+                            <div style={{ marginTop: '12px', padding: '12px', background: '#fff', borderRadius: '8px' }}>
+                              <input
+                                type="text"
+                                placeholder="Search existing products..."
+                                value={productSearchQuery}
+                                onChange={(e) => setProductSearchQuery(e.target.value)}
+                                className={styles.formInput}
+                                style={{ marginBottom: '8px' }}
+                                autoFocus
+                              />
+                              {filteredProducts.length > 0 && (
+                                <div style={{ maxHeight: '150px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '8px' }}>
+                                  {filteredProducts.map(p => (
+                                    <button
+                                      key={p.id}
+                                      onClick={() => handleChangeMatch(aiItem, p)}
+                                      style={{ width: '100%', textAlign: 'left', padding: '10px 12px', background: 'none', border: 'none', borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                                    >
+                                      {p.brand && <span style={{ fontWeight: 700, fontSize: '10px', color: '#FF580F', textTransform: 'uppercase' }}>{p.brand} </span>}
+                                      <span style={{ fontWeight: 500 }}>{p.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setAiParsedItems(prev => prev.map(item =>
+                                    item === aiItem ? { ...item, changingMatch: false } : item
+                                  ));
+                                  setProductSearchQuery('');
+                                }}
+                                style={{ padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -813,23 +1225,25 @@ export default function ReceiveItemsPage() {
               );
             })()}
 
-            {/* Section 4: Totals Check */}
-            {(aiTotal || receiptTotalNum > 0) && (
+            {/* Section 4: Totals Check - Fixed math */}
+            {(aiTotal || receiptTotalNum > 0 || calculatedTotal > 0) && (
               <div style={{ padding: '16px', background: difference < 1 ? '#f0fdf4' : '#fef3c7', border: `1px solid ${difference < 1 ? '#22c55e' : '#f59e0b'}`, borderRadius: '10px', marginBottom: '24px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Totals Check</h3>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span>Receipt Total:</span>
+                  <span>Receipt Total (from receipt):</span>
                   <span style={{ fontWeight: 600 }}>${receiptTotalNum.toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span>Items Total:</span>
+                  <span>Matched Items (calculated):</span>
                   <span style={{ fontWeight: 600 }}>${calculatedTotal.toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
                   <span>Difference:</span>
-                  <span style={{ fontWeight: 600, color: difference < 1 ? '#16a34a' : '#f59e0b' }}>${difference.toFixed(2)}</span>
+                  <span style={{ fontWeight: 600, color: difference < 1 ? '#16a34a' : '#f59e0b' }}>
+                    ${difference.toFixed(2)} {difference > 0 && difference < 2 ? '(likely tax/rounding)' : ''}
+                  </span>
                 </div>
-                {difference >= 1 && (
+                {difference >= 2 && (
                   <div style={{ fontSize: '12px', color: '#92400e', marginTop: '8px' }}>
                     ⚠ Totals don&apos;t match. Check for unscanned items or incorrect prices.
                   </div>
@@ -862,7 +1276,7 @@ export default function ReceiveItemsPage() {
 
             {/* Summary */}
             <div style={{ padding: '12px', background: '#f3f4f6', borderRadius: '8px', marginBottom: '16px' }}>
-              <div><strong>Store:</strong> {storeName}</div>
+              <div><strong>Store:</strong> {storeName}{storeNumber ? ` ${storeNumber}` : ''}</div>
               <div><strong>Date:</strong> {purchaseDate}</div>
               <div><strong>By:</strong> {purchasedBy}</div>
               <div><strong>Items:</strong> {totalItemCount}</div>

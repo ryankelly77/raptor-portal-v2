@@ -31,6 +31,10 @@ interface AIResponse {
   tax: number | null;
   items_count: number;
   store_name: string;
+  store_number: string | null;
+  store_address: string | null;
+  purchase_date: string | null;
+  payment_method: string | null;
   notes: string;
 }
 
@@ -68,7 +72,7 @@ export async function POST(request: NextRequest) {
   let body: {
     imageUrl: string;
     products: Product[];
-    storeName: string;
+    storeName?: string; // Optional hint, AI will detect from receipt
   };
 
   try {
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { imageUrl, products, storeName } = body;
+  const { imageUrl, products } = body;
 
   if (!imageUrl || typeof imageUrl !== 'string') {
     return NextResponse.json({ error: 'imageUrl is required' }, { status: 400 });
@@ -92,30 +96,49 @@ export async function POST(request: NextRequest) {
       apiKey: anthropicKey
     });
 
-    // Build the prompt
-    const prompt = `You are reading a store receipt image. Extract every purchased item with its price.
-
-Store: ${storeName || 'Unknown'}
+    // Build the prompt - now includes store/date extraction
+    const prompt = `You are reading a store receipt image. Extract ALL information from the receipt.
 
 PRODUCT CATALOG (items the user has in their inventory system):
 ${products.length > 0 ? products.map(p => `ID: ${p.id} | Barcode: ${p.barcode} | ${p.brand || 'N/A'} - ${p.name} (${p.category})`).join('\n') : '(No products in catalog yet)'}
 
 Tasks:
-1. Read every item line on the receipt — item name/description, barcode/UPC if visible, and price
-2. Match each item to the product catalog. Receipts use heavy abbreviations:
-   - "BRE" = "Black Rifle Energy" or "Black Rifle Coffee Company"
-   - "PJT MNGO" = "Project Mango"
-   - "RGR BERY" = "Ranger Berry"
-   - "FDM PNCH" = "Freedom Punch"
-   - "MNSTR" = "Monster Energy"
-   - "ALE" or "ALANI" = "Alani Nu"
+1. STORE INFORMATION - Read from the receipt header:
+   - Store name (e.g., "Walmart", "Sam's Club", "Costco", "HEB")
+   - Store number if visible (e.g., "#1701")
+   - Store address if visible
+   - Purchase date (look for date/time stamp, return as YYYY-MM-DD)
+   - Payment method (DEBIT, CREDIT, CASH, etc.)
+
+2. PRODUCT ITEMS - Read every item line on the receipt:
+   - Item name/description as printed
+   - Barcode/UPC if visible
+   - Price per item
+   - Quantity (look for "x2", "QTY 3", or multiple lines)
+
+3. MATCH TO CATALOG - Match receipt items to the product catalog:
+   - Receipts use heavy abbreviations:
+     * "BRE" = "Black Rifle Energy" or "Black Rifle Coffee Company"
+     * "PJT MNGO" = "Project Mango"
+     * "RGR BERY" = "Ranger Berry"
+     * "FDM PNCH" = "Freedom Punch"
+     * "MNSTR" = "Monster Energy"
+     * "ALE" or "ALANI" = "Alani Nu"
    - Use barcode numbers to match if they appear on receipt and in catalog
-3. Identify items NOT in the catalog as new products (is_new_product: true)
-4. Extract subtotal, total, tax amounts
-5. For new products, suggest a brand and category
+   - Mark items NOT in catalog as is_new_product: true
+
+4. TOTALS - Extract:
+   - Subtotal (before tax)
+   - Tax amount
+   - Total (what was charged)
 
 Respond ONLY with valid JSON, no markdown, no backticks:
 {
+  "store_name": "Store Name",
+  "store_number": "#1234 or null",
+  "store_address": "Address or null",
+  "purchase_date": "YYYY-MM-DD or null",
+  "payment_method": "DEBIT/CREDIT/CASH or null",
   "items": [
     {
       "receipt_text": "abbreviated text as printed on receipt",
@@ -126,16 +149,15 @@ Respond ONLY with valid JSON, no markdown, no backticks:
       "product_id": "uuid if matched to catalog, null if not",
       "confidence": "high",
       "is_new_product": false,
-      "suggested_brand": null,
-      "suggested_category": null,
-      "reasoning": "brief explanation"
+      "suggested_brand": "Brand name for new products, null if matched",
+      "suggested_category": "Category for new products, null if matched",
+      "reasoning": "brief explanation of match"
     }
   ],
   "subtotal": 14.96,
-  "total": 14.96,
   "tax": 0.00,
+  "total": 14.96,
   "items_count": 5,
-  "store_name": "${storeName || 'Unknown'}",
   "notes": "any observations about the receipt"
 }
 
@@ -144,7 +166,8 @@ Important:
 - price and quantity must be numbers
 - For items not in catalog: product_id is null, is_new_product is true
 - confidence: "high" = certain match, "medium" = likely, "low" = uncertain
-- Ignore tax lines, payment lines, change amounts — only actual product items`;
+- Ignore tax lines, payment lines, change amounts — only actual product items
+- The purchase_date should be extracted from the receipt, format as YYYY-MM-DD`;
 
     console.log('[AI Vision] Sending receipt image with', products.length, 'products in catalog');
 
@@ -311,10 +334,14 @@ function processAIResponse(response: Anthropic.Message, products: Product[]): Ne
     tax: typeof result.tax === 'number' ? result.tax : null,
     items_count: result.items_count || result.items?.length || 0,
     store_name: result.store_name || 'Unknown',
+    store_number: result.store_number || null,
+    store_address: result.store_address || null,
+    purchase_date: result.purchase_date || null,
+    payment_method: result.payment_method || null,
     notes: result.notes || ''
   };
 
-  console.log('[AI Vision] Returning', validatedResult.items.length, 'items, total:', validatedResult.total);
+  console.log('[AI Vision] Returning', validatedResult.items.length, 'items, total:', validatedResult.total, 'store:', validatedResult.store_name);
 
   return NextResponse.json({
     success: true,
