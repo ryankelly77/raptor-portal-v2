@@ -161,7 +161,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
   },
   inventory_purchase_items: {
     allowedFields: [
-      'purchase_id', 'product_id', 'quantity', 'unit_cost',
+      'purchase_id', 'product_id', 'quantity', 'unit_cost', 'expiration_date',
     ],
     requiredForCreate: ['purchase_id', 'product_id'],
     orderBy: { column: 'created_at', ascending: false },
@@ -169,7 +169,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
   inventory_movements: {
     allowedFields: [
       'product_id', 'location_id', 'quantity', 'movement_type', 'reason',
-      'reference_id', 'moved_by', 'notes',
+      'reference_id', 'moved_by', 'notes', 'expiration_date', 'purchase_item_id',
     ],
     requiredForCreate: ['product_id', 'quantity', 'movement_type'],
     orderBy: { column: 'created_at', ascending: false },
@@ -187,6 +187,13 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
     ],
     requiredForCreate: ['receipt_text', 'product_id'],
     orderBy: { column: 'receipt_text', ascending: true },
+  },
+  expiration_settings: {
+    allowedFields: [
+      'category', 'warning_days', 'critical_days',
+    ],
+    requiredForCreate: ['category'],
+    orderBy: { column: 'category', ascending: true },
   },
 };
 

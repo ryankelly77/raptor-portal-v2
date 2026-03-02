@@ -7,11 +7,12 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR02-D';
+const BUILD_VERSION = 'v2024-MAR02-H';
 
 interface Product {
   id: string;
   name: string;
+  brand?: string | null;
   barcode: string;
   category: string;
   default_price: number | null;
@@ -27,6 +28,7 @@ interface PurchaseItem {
   product_id: string;
   quantity: number;
   unit_cost: number | null;
+  expiration_date: string | null;
   created_at: string;
 }
 
@@ -39,7 +41,34 @@ interface Movement {
   moved_by: string | null;
   notes: string | null;
   created_at: string;
+  expiration_date?: string | null;
+  purchase_item_id?: string | null;
   product?: Product;
+}
+
+interface ExpirationSetting {
+  id: string;
+  category: string;
+  warning_days: number;
+  critical_days: number;
+}
+
+interface ExpiringBatch {
+  product: Product;
+  quantity: number;
+  expirationDate: string;
+  daysUntilExpiry: number;
+  status: 'critical' | 'warning' | 'ok';
+  location: 'on-hand' | 'in-machine';
+}
+
+interface ProductInventory {
+  product: Product;
+  onHandQty: number;
+  inMachineQty: number;
+  unitCost: number | null;
+  earliestExpiration: string | null;
+  expirationStatus: 'critical' | 'warning' | 'ok' | null;
 }
 
 interface SummaryStats {
@@ -47,6 +76,8 @@ interface SummaryStats {
   onHandQty: number;
   availableQty: number;
   totalValue: number;
+  expiringCritical: number;
+  expiringWarning: number;
 }
 
 export default function InventoryPage() {
@@ -57,17 +88,22 @@ export default function InventoryPage() {
     onHandQty: 0,
     availableQty: 0,
     totalValue: 0,
+    expiringCritical: 0,
+    expiringWarning: 0,
   });
   const [recentMovements, setRecentMovements] = useState<Movement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [expiringBatches, setExpiringBatches] = useState<ExpiringBatch[]>([]);
+  const [productInventory, setProductInventory] = useState<ProductInventory[]>([]);
+  const [showAllProducts, setShowAllProducts] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Load products, movements, and purchase items in parallel
-      const [productsRes, movementsRes, purchaseItemsRes] = await Promise.all([
+      // Load products, movements, purchase items, and expiration settings in parallel
+      const [productsRes, movementsRes, purchaseItemsRes, expirationRes] = await Promise.all([
         adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({ table: 'products', action: 'read' }),
@@ -79,6 +115,10 @@ export default function InventoryPage() {
         adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({ table: 'inventory_purchase_items', action: 'read' }),
+        }),
+        adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({ table: 'expiration_settings', action: 'read' }),
         }),
       ]);
 
@@ -186,13 +226,107 @@ export default function InventoryPage() {
         totalValue += qty * unitCost;
       }
 
-      console.log('[Inventory] Final stats:', { totalOnHand, totalInMachine, totalValue });
+      // Parse expiration settings
+      const expSettingsData = await expirationRes.json();
+      const expSettings: ExpirationSetting[] = expSettingsData.data || [];
+      const expSettingsMap = new Map(expSettings.map(s => [s.category, s]));
+
+      // Default settings if not configured
+      const getExpSettings = (category: string) => {
+        return expSettingsMap.get(category) || { warning_days: 14, critical_days: 3 };
+      };
+
+      // Calculate expiration alerts from purchase items with expiration dates
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const batches: ExpiringBatch[] = [];
+
+      for (const purchaseItem of purchaseItemsList) {
+        if (!purchaseItem.expiration_date) continue;
+
+        const product = productsMap.get(purchaseItem.product_id);
+        if (!product) continue;
+
+        const expDate = new Date(purchaseItem.expiration_date);
+        const daysUntilExpiry = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const settings = getExpSettings(product.category);
+
+        let status: 'critical' | 'warning' | 'ok' = 'ok';
+        if (daysUntilExpiry <= settings.critical_days) {
+          status = 'critical';
+        } else if (daysUntilExpiry <= settings.warning_days) {
+          status = 'warning';
+        }
+
+        if (status !== 'ok') {
+          batches.push({
+            product,
+            quantity: purchaseItem.quantity,
+            expirationDate: purchaseItem.expiration_date,
+            daysUntilExpiry,
+            status,
+            location: 'on-hand', // For now, assume on-hand
+          });
+        }
+      }
+
+      // Sort by days until expiry (most urgent first)
+      batches.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+      setExpiringBatches(batches);
+
+      const expiringCritical = batches.filter(b => b.status === 'critical').length;
+      const expiringWarning = batches.filter(b => b.status === 'warning').length;
+
+      // Build product inventory list
+      const inventoryList: ProductInventory[] = [];
+      for (const product of productsList) {
+        const onHandQty = Math.max(0, productOnHand.get(product.id) || 0);
+        const inMachineQty = Math.max(0, productInMachine.get(product.id) || 0);
+
+        // Find earliest expiration for this product
+        const productPurchaseItems = purchaseItemsList
+          .filter(pi => pi.product_id === product.id && pi.expiration_date)
+          .sort((a, b) => new Date(a.expiration_date!).getTime() - new Date(b.expiration_date!).getTime());
+
+        const earliestExp = productPurchaseItems[0]?.expiration_date || null;
+        let expirationStatus: 'critical' | 'warning' | 'ok' | null = null;
+
+        if (earliestExp) {
+          const expDate = new Date(earliestExp);
+          const daysUntilExpiry = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          const settings = getExpSettings(product.category);
+
+          if (daysUntilExpiry <= settings.critical_days) {
+            expirationStatus = 'critical';
+          } else if (daysUntilExpiry <= settings.warning_days) {
+            expirationStatus = 'warning';
+          } else {
+            expirationStatus = 'ok';
+          }
+        }
+
+        if (onHandQty > 0 || inMachineQty > 0) {
+          inventoryList.push({
+            product,
+            onHandQty,
+            inMachineQty,
+            unitCost: productCostMap.get(product.id) || product.default_price,
+            earliestExpiration: earliestExp,
+            expirationStatus,
+          });
+        }
+      }
+      setProductInventory(inventoryList);
+
+      console.log('[Inventory] Final stats:', { totalOnHand, totalInMachine, totalValue, expiringCritical, expiringWarning });
 
       setStats({
         totalProducts: productsList.length,
         onHandQty: totalOnHand,
         availableQty: totalInMachine,
-        totalValue: Math.round(totalValue * 100) / 100, // Round to 2 decimals
+        totalValue: Math.round(totalValue * 100) / 100,
+        expiringCritical,
+        expiringWarning,
       });
     } catch (err) {
       console.error('Error loading inventory data:', err);
@@ -252,6 +386,22 @@ export default function InventoryPage() {
     });
   }
 
+  function formatExpDate(dateStr: string) {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  function getDaysLabel(days: number) {
+    if (days < 0) return 'EXPIRED';
+    if (days === 0) return 'TODAY';
+    if (days === 1) return 'TOMORROW';
+    return `${days} days`;
+  }
+
   if (loading) {
     return (
       <AdminShell title="Inventory">
@@ -297,6 +447,19 @@ export default function InventoryPage() {
             <div className={styles.summaryLabel}>Total Value</div>
             <div className={styles.summaryValue}>${stats.totalValue.toFixed(2)}</div>
           </div>
+          {(stats.expiringCritical > 0 || stats.expiringWarning > 0) && (
+            <div className={styles.summaryCard} style={{
+              background: stats.expiringCritical > 0 ? '#fef2f2' : '#fef3c7',
+              border: `2px solid ${stats.expiringCritical > 0 ? '#dc2626' : '#f59e0b'}`,
+            }}>
+              <div className={styles.summaryLabel} style={{ color: stats.expiringCritical > 0 ? '#dc2626' : '#92400e' }}>
+                ⚠️ Expiring Soon
+              </div>
+              <div className={styles.summaryValue} style={{ color: stats.expiringCritical > 0 ? '#dc2626' : '#f59e0b' }}>
+                {stats.expiringCritical + stats.expiringWarning}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quick Actions */}
@@ -341,6 +504,114 @@ export default function InventoryPage() {
             </svg>
             Receipt Aliases
           </Link>
+        </div>
+
+        {/* Expiration Alerts */}
+        {expiringBatches.length > 0 && (
+          <div className={styles.sectionCard} style={{ border: '2px solid #f59e0b', background: '#fffbeb' }}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>⚠️ Expiration Alerts</h2>
+            </div>
+            <div className={styles.sectionBody}>
+              {expiringBatches.map((batch, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px',
+                    background: batch.status === 'critical' ? '#fef2f2' : '#fef3c7',
+                    borderRadius: '8px',
+                    marginBottom: '8px',
+                    border: `1px solid ${batch.status === 'critical' ? '#dc2626' : '#f59e0b'}`,
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '16px' }}>{batch.status === 'critical' ? '🔴' : '🟡'}</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {batch.product.brand && <span style={{ color: '#FF580F', fontSize: '11px', textTransform: 'uppercase' }}>{batch.product.brand} </span>}
+                        {batch.product.name}
+                      </span>
+                      <span style={{ color: '#6b7280', fontSize: '13px' }}>({batch.quantity} units)</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: batch.status === 'critical' ? '#dc2626' : '#92400e', marginTop: '4px' }}>
+                      {batch.status === 'critical' ? '🚨' : '⏰'} Expires {formatExpDate(batch.expirationDate)} ({getDaysLabel(batch.daysUntilExpiry)})
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button style={{ padding: '6px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                      Discard
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Product Inventory List */}
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Product Inventory</h2>
+            <button
+              onClick={() => setShowAllProducts(!showAllProducts)}
+              className={styles.actionButton}
+              style={{ padding: '8px 16px', minHeight: 'auto' }}
+            >
+              {showAllProducts ? 'Show Less' : `Show All (${productInventory.length})`}
+            </button>
+          </div>
+          <div className={styles.sectionBody}>
+            {productInventory.length === 0 ? (
+              <div className={styles.emptyState}>
+                <p>No inventory on hand.</p>
+              </div>
+            ) : (
+              <div>
+                {/* Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '8px', padding: '8px 12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>
+                  <div>Product</div>
+                  <div style={{ textAlign: 'right' }}>On-Hand</div>
+                  <div style={{ textAlign: 'right' }}>In Machine</div>
+                  <div style={{ textAlign: 'right' }}>Unit Cost</div>
+                  <div style={{ textAlign: 'right' }}>Earliest Exp</div>
+                </div>
+                {/* Rows */}
+                {(showAllProducts ? productInventory : productInventory.slice(0, 5)).map((inv) => (
+                  <div
+                    key={inv.product.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                      gap: '8px',
+                      padding: '10px 12px',
+                      borderBottom: '1px solid #e5e7eb',
+                      fontSize: '13px',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      {inv.product.brand && <span style={{ color: '#FF580F', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}>{inv.product.brand} </span>}
+                      <span style={{ fontWeight: 500 }}>{inv.product.name}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>{inv.onHandQty}</div>
+                    <div style={{ textAlign: 'right', color: '#6b7280' }}>{inv.inMachineQty}</div>
+                    <div style={{ textAlign: 'right', color: '#6b7280' }}>{inv.unitCost ? `$${inv.unitCost.toFixed(2)}` : '—'}</div>
+                    <div style={{
+                      textAlign: 'right',
+                      fontSize: '12px',
+                      color: inv.expirationStatus === 'critical' ? '#dc2626' : inv.expirationStatus === 'warning' ? '#f59e0b' : '#22c55e',
+                      fontWeight: inv.expirationStatus === 'critical' || inv.expirationStatus === 'warning' ? 600 : 400,
+                    }}>
+                      {inv.earliestExpiration ? formatExpDate(inv.earliestExpiration) : '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Recent Movements */}

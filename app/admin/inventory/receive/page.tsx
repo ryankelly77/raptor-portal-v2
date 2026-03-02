@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-G';
+const BUILD_VERSION = 'v2024-MAR02-H';
 
 interface ErrorInfo {
   message: string;
@@ -34,6 +34,8 @@ interface ScannedItem {
   units_per_package?: number;
   unit_name?: string;
   package_name?: string;
+  // Expiration tracking
+  expirationDate?: string; // YYYY-MM-DD format
 }
 
 // AI-parsed receipt item (from Vision API)
@@ -77,6 +79,23 @@ interface Product {
 
 // Category options for new products
 const CATEGORY_OPTIONS = ['Beverage', 'Snack', 'Meal', 'Candy', 'Other'];
+
+// Default expiration days by category
+const DEFAULT_EXPIRATION_DAYS: Record<string, number> = {
+  Meal: 7,
+  Snack: 90,
+  Beverage: 180,
+  Candy: 180,
+  Other: 90,
+};
+
+// Calculate default expiration date based on category
+function getDefaultExpirationDate(category: string): string {
+  const days = DEFAULT_EXPIRATION_DAYS[category] || 90;
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split('T')[0];
+}
 
 export default function ReceiveItemsPage() {
   const router = useRouter();
@@ -206,11 +225,12 @@ export default function ReceiveItemsPage() {
 
   // Handle lookup result
   const handleLookupResult = (result: any) => {
+    const category = result.product.category || 'Other';
     const newItem: ScannedItem = {
       barcode: result.product.barcode,
       name: result.product.name,
       brand: result.product.brand,
-      category: result.product.category,
+      category: category,
       quantity: 1,
       unitCost: '',
       productId: result.existingProduct?.id,
@@ -221,6 +241,8 @@ export default function ReceiveItemsPage() {
       units_per_package: result.product.units_per_package || 1,
       unit_name: result.product.unit_name || 'each',
       package_name: result.product.package_name || 'each',
+      // Set default expiration based on category
+      expirationDate: getDefaultExpirationDate(category),
     };
     setItems([...items, newItem]);
     setCurrentBarcode(null);
@@ -241,6 +263,13 @@ export default function ReceiveItemsPage() {
   const updatePrice = (barcode: string, price: string) => {
     setItems(items.map(item =>
       item.barcode === barcode ? { ...item, unitCost: price } : item
+    ));
+  };
+
+  // Update item expiration date
+  const updateExpirationDate = (barcode: string, date: string) => {
+    setItems(items.map(item =>
+      item.barcode === barcode ? { ...item, expirationDate: date } : item
     ));
   };
 
@@ -510,11 +539,12 @@ export default function ReceiveItemsPage() {
       ));
     } else {
       // Add new item with package info
+      const category = newProduct.category || 'Other';
       const newItem: ScannedItem = {
         barcode: newProduct.barcode,
         name: newProduct.name,
         brand: newProduct.brand,
-        category: newProduct.category,
+        category: category,
         quantity: itemQty,
         unitCost: aiItem.price.toFixed(2),
         productId: newProduct.id,
@@ -525,6 +555,8 @@ export default function ReceiveItemsPage() {
         units_per_package: newProduct.units_per_package || 1,
         unit_name: newProduct.unit_name || 'each',
         package_name: newProduct.package_name || 'each',
+        // Default expiration based on category
+        expirationDate: getDefaultExpirationDate(category),
       };
       setItems(prev => [...prev, newItem]);
     }
@@ -620,7 +652,7 @@ export default function ReceiveItemsPage() {
           ? Math.round((packagePrice / unitsPerPkg) * 100) / 100 // e.g., $5.48 / 6 = $0.91
           : packagePrice;
 
-        console.log('[Receive] Item:', item.name, '| Packages:', packageQty, '| Units/pkg:', unitsPerPkg, '| Total units:', totalUnits, '| Package price:', packagePrice, '| Per-unit cost:', perUnitCost);
+        console.log('[Receive] Item:', item.name, '| Packages:', packageQty, '| Units/pkg:', unitsPerPkg, '| Total units:', totalUnits, '| Package price:', packagePrice, '| Per-unit cost:', perUnitCost, '| Exp:', item.expirationDate);
 
         // Create purchase item with per-unit cost (store individual units)
         const purchaseItemRes = await adminFetch('/api/admin/crud', {
@@ -633,13 +665,18 @@ export default function ReceiveItemsPage() {
               product_id: productId,
               quantity: totalUnits, // Store as individual units
               unit_cost: perUnitCost, // Store per-unit cost
+              expiration_date: item.expirationDate || null, // Expiration tracking
             },
           }),
         });
 
+        let purchaseItemId: string | null = null;
         if (!purchaseItemRes.ok) {
           const errData = await purchaseItemRes.json();
           console.error('[Receive] Failed to create purchase item:', errData);
+        } else {
+          const purchaseItemData = await purchaseItemRes.json();
+          purchaseItemId = purchaseItemData.data?.id || null;
         }
 
         // Create inventory movement (quantity is in PACKAGES for movements)
@@ -655,6 +692,8 @@ export default function ReceiveItemsPage() {
               movement_type: 'purchase_in',
               moved_by: purchasedBy,
               notes: `Received from ${storeName}${unitsPerPkg > 1 ? ` (${packageQty} pkg × ${unitsPerPkg} = ${totalUnits} units)` : ''}`,
+              expiration_date: item.expirationDate || null, // Expiration tracking
+              purchase_item_id: purchaseItemId, // Link to batch for FIFO
             },
           }),
         });
@@ -665,7 +704,7 @@ export default function ReceiveItemsPage() {
           throw new Error(`Failed to create movement: ${errData.error || 'Unknown error'}`);
         } else {
           const movementData = await movementRes.json();
-          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', packageQty, 'pkgs (', totalUnits, 'units)');
+          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', packageQty, 'pkgs (', totalUnits, 'units)', 'exp:', item.expirationDate);
         }
       }
 
@@ -997,11 +1036,12 @@ export default function ReceiveItemsPage() {
                                     const alreadyExists = items.some(i => i.barcode === product.barcode || i.productId === product.id);
                                     if (!alreadyExists) {
                                       // Add to items with package info from product
+                                      const category = product.category || 'Other';
                                       const newItem: ScannedItem = {
                                         barcode: product.barcode,
                                         name: product.name,
                                         brand: product.brand,
-                                        category: product.category,
+                                        category: category,
                                         quantity: aiItem.quantity || 1, // Ensure at least 1
                                         unitCost: aiItem.price.toFixed(2),
                                         productId: product.id,
@@ -1012,6 +1052,8 @@ export default function ReceiveItemsPage() {
                                         units_per_package: product.units_per_package || 1,
                                         unit_name: product.unit_name || 'each',
                                         package_name: product.package_name || 'each',
+                                        // Default expiration based on category
+                                        expirationDate: getDefaultExpirationDate(category),
                                       };
                                       setItems(prev => [...prev, newItem]);
                                       console.log('[Accept] Added new item:', product.name, 'qty:', aiItem.quantity || 1);
@@ -1390,8 +1432,15 @@ export default function ReceiveItemsPage() {
               <div><strong>Total:</strong> ${(receiptTotalNum || calculatedTotal).toFixed(2)}</div>
             </div>
 
+            {/* Expiration hint */}
+            {items.some(i => !i.expirationDate) && (
+              <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', color: '#92400e' }}>
+                💡 Adding expiration dates enables FIFO inventory management and spoilage alerts
+              </div>
+            )}
+
             {/* Items List */}
-            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Items</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Items & Expiration Dates</h3>
             {items.map((item) => {
               const hasPackageInfo = item.units_per_package && item.units_per_package > 1;
               const unitsPerPkg = item.units_per_package || 1;
@@ -1401,27 +1450,46 @@ export default function ReceiveItemsPage() {
                 ? Math.round((packagePrice / unitsPerPkg) * 100) / 100
                 : packagePrice;
               return (
-                <div key={item.barcode} style={{ padding: '12px', background: '#f9fafb', borderRadius: '10px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
-                    <div style={{ fontWeight: 600 }}>{item.name}</div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                      {hasPackageInfo ? (
-                        <span>{item.quantity} {item.package_name}{item.quantity > 1 ? 's' : ''} = <strong style={{ color: '#2563eb' }}>{totalUnits} {item.unit_name}s</strong></span>
-                      ) : (
-                        <span>Qty: {item.quantity}</span>
+                <div key={item.barcode} style={{ padding: '12px', background: '#f9fafb', borderRadius: '10px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div>
+                      {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
+                      <div style={{ fontWeight: 600 }}>{item.name}</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                        {hasPackageInfo ? (
+                          <span>{item.quantity} {item.package_name}{item.quantity > 1 ? 's' : ''} = <strong style={{ color: '#2563eb' }}>{totalUnits} {item.unit_name}s</strong></span>
+                        ) : (
+                          <span>Qty: {item.quantity}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, fontSize: '16px' }}>
+                        {packagePrice ? `$${packagePrice.toFixed(2)}` : '—'}
+                      </div>
+                      {hasPackageInfo && perUnitCost && (
+                        <div style={{ fontSize: '11px', color: '#2563eb' }}>
+                          = ${perUnitCost.toFixed(2)}/{item.unit_name}
+                        </div>
                       )}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 700, fontSize: '16px' }}>
-                      {packagePrice ? `$${packagePrice.toFixed(2)}` : '—'}
-                    </div>
-                    {hasPackageInfo && perUnitCost && (
-                      <div style={{ fontSize: '11px', color: '#2563eb' }}>
-                        = ${perUnitCost.toFixed(2)}/{item.unit_name}
-                      </div>
-                    )}
+                  {/* Expiration Date Input */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                    <label style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap' }}>Expires:</label>
+                    <input
+                      type="date"
+                      value={item.expirationDate || ''}
+                      onChange={(e) => updateExpirationDate(item.barcode, e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        minHeight: '44px', // Large tap target for mobile
+                      }}
+                    />
                   </div>
                 </div>
               );
