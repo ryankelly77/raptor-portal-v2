@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-H';
+const BUILD_VERSION = 'v2024-MAR01-I';
 
 interface ErrorInfo {
   message: string;
@@ -189,31 +189,60 @@ export default function ReceiveItemsPage() {
       setOcrRawText(rawText);
       setOcrStatus('Parsing prices...');
 
-      // Parse the text for prices
+      // Parse the text for prices - handles Walmart format (no $, tax codes like F/T/X)
       const lines = rawText.split('\n').filter(l => l.trim());
       const parsedItems: ParsedOCRItem[] = [];
       let foundTotal: number | null = null;
 
+      console.log('[OCR] Parsing', lines.length, 'lines');
+
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed) continue;
+        if (!trimmed || trimmed.length < 3) continue;
 
-        // Match price patterns: $1.99, 1.99, $ 1.99 at end of line
-        const priceMatch = trimmed.match(/\$?\s?(\d{1,3}\.\d{2})\s*$/);
+        console.log('[OCR] Line:', trimmed);
+
+        // Check for multi-quantity format: "2 @ 2.99" or "2 @ 2.99    5.98"
+        const multiQtyMatch = trimmed.match(/(\d+)\s*[@xX]\s*(\d+\.\d{2})/);
+        if (multiQtyMatch) {
+          const qty = parseInt(multiQtyMatch[1]);
+          const unitPrice = parseFloat(multiQtyMatch[2]);
+          const description = trimmed.replace(/\d+\s*[@xX]\s*\d+\.\d{2}.*$/, '').trim();
+          if (description && unitPrice > 0) {
+            parsedItems.push({ description, price: unitPrice });
+            console.log('[OCR] Multi-qty item:', description, qty, 'x $' + unitPrice);
+            continue;
+          }
+        }
+
+        // Pattern: price with optional $ and optional tax code letter at end
+        // Handles: $4.98, 4.98, 4.98 F, 4.98F, $ 4.98
+        const priceMatch = trimmed.match(/\$?\s?(\d{1,3}\.\d{2})\s*[A-Z]?\s*$/);
         if (priceMatch) {
           const price = parseFloat(priceMatch[1]);
           const description = trimmed.replace(priceMatch[0], '').trim();
 
-          // Check if this is a total line
-          if (/total|subtotal|sum/i.test(description) && !foundTotal) {
-            foundTotal = price;
-            console.log('[OCR] Found total:', price);
-          } else if (!/tax|fee|change|cash|card|visa|master|payment|balance|tend/i.test(description)) {
-            // Skip tax, payment method lines, etc.
-            if (description && price > 0 && price < 500) {
-              parsedItems.push({ description, price });
-              console.log('[OCR] Parsed item:', description, '$' + price);
+          // Skip totals, tax, payment lines
+          if (/total|subtotal|tax|change|cash|credit|debit|visa|master|card|payment|balance|savings|tend/i.test(description)) {
+            if (/total/i.test(description) && !/sub/i.test(description)) {
+              foundTotal = price;
+              console.log('[OCR] Found total:', price);
             }
+            continue;
+          }
+
+          // Skip very small amounts that are likely tax/fees
+          if (price < 0.50 && description.length < 5) continue;
+
+          // Skip empty descriptions
+          if (!description) continue;
+
+          // Skip lines that look like dates, times, phone numbers
+          if (/^\d{1,2}[\/\-]\d{1,2}|^\d{3}[\-\s]\d{3}|manager|cashier|store|#\d+/i.test(description)) continue;
+
+          if (price > 0 && price < 500) {
+            parsedItems.push({ description, price });
+            console.log('[OCR] Parsed item:', description, '$' + price);
           }
         }
       }
@@ -568,6 +597,57 @@ export default function ReceiveItemsPage() {
               <div style={{ padding: '12px', background: '#f0fdf4', border: '1px solid #22c55e', borderRadius: '8px', marginBottom: '16px' }}>
                 <div style={{ fontWeight: 600, color: '#16a34a', marginBottom: '8px' }}>✓ Found {ocrItems.length} items on receipt</div>
                 {receiptTotal && <div style={{ fontSize: '13px', color: '#374151' }}>Total: ${receiptTotal}</div>}
+              </div>
+            )}
+
+            {/* DEBUG: Always visible OCR output */}
+            {(ocrRawText || ocrItems.length > 0 || ocrStatus) && (
+              <div style={{ background: '#f5f5f5', padding: '16px', marginBottom: '16px', borderRadius: '8px', border: '1px solid #d1d5db' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 700, color: '#374151' }}>DEBUG: OCR Output</h4>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <strong style={{ fontSize: '12px' }}>Status:</strong>
+                  <span style={{ fontSize: '12px', marginLeft: '8px' }}>{ocrStatus || 'Not started'}</span>
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <strong style={{ fontSize: '12px' }}>Raw Text ({ocrRawText.length} chars):</strong>
+                  <pre style={{
+                    marginTop: '8px',
+                    padding: '12px',
+                    background: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: '200px',
+                    overflow: 'auto',
+                    margin: 0
+                  }}>
+                    {ocrRawText || '(no text detected)'}
+                  </pre>
+                </div>
+
+                <div>
+                  <strong style={{ fontSize: '12px' }}>Parsed Items ({ocrItems.length}):</strong>
+                  <pre style={{
+                    marginTop: '8px',
+                    padding: '12px',
+                    background: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: '150px',
+                    overflow: 'auto',
+                    margin: 0
+                  }}>
+                    {ocrItems.length > 0 ? JSON.stringify(ocrItems, null, 2) : '(no items parsed)'}
+                  </pre>
+                </div>
               </div>
             )}
 
