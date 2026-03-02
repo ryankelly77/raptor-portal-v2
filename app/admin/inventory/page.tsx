@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AdminShell } from '../components/AdminShell';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR01-A';
+const BUILD_VERSION = 'v2024-MAR01-C';
 
 interface Product {
   id: string;
@@ -34,8 +35,13 @@ interface SummaryStats {
   totalValue: number;
 }
 
+function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('adminToken');
+}
+
 function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
+  const token = getToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -43,7 +49,9 @@ function getAuthHeaders(): HeadersInit {
 }
 
 export default function InventoryPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
   const [stats, setStats] = useState<SummaryStats>({
     totalProducts: 0,
     onHandQty: 0,
@@ -57,12 +65,30 @@ export default function InventoryPage() {
     try {
       setLoading(true);
 
+      // Check token first
+      const token = getToken();
+      if (!token) {
+        console.warn('[Inventory] No token, redirecting to login');
+        router.push('/admin/login');
+        return;
+      }
+
       // Load products
       const productsRes = await fetch('/api/admin/crud', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ table: 'products', action: 'read' }),
       });
+
+      // Handle auth error
+      if (productsRes.status === 401) {
+        sessionStorage.removeItem('adminAuth');
+        sessionStorage.removeItem('adminToken');
+        setAuthError(true);
+        router.push('/admin/login');
+        return;
+      }
+
       const productsData = await productsRes.json();
       const productsList: Product[] = productsData.data || [];
       setProducts(productsList);
@@ -122,7 +148,7 @@ export default function InventoryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     loadData();
@@ -169,6 +195,18 @@ export default function InventoryPage() {
       hour: 'numeric',
       minute: '2-digit',
     });
+  }
+
+  if (authError) {
+    return (
+      <AdminShell title="Inventory">
+        <div className={styles.inventoryPage}>
+          <div style={{ textAlign: 'center', padding: '40px', color: '#dc2626' }}>
+            Session expired. Redirecting to login...
+          </div>
+        </div>
+      </AdminShell>
+    );
   }
 
   if (loading) {

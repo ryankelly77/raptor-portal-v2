@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminShell } from '../../components/AdminShell';
 import { BarcodeScanner } from '../components/BarcodeScanner';
@@ -8,7 +8,7 @@ import { BarcodeLookup } from '../components/BarcodeLookup';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-B';
+const BUILD_VERSION = 'v2024-MAR01-C';
 
 interface ScannedItem {
   barcode: string;
@@ -27,8 +27,15 @@ interface OCRItem {
   price: number | null;
 }
 
+// Get token with validation
+function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('adminToken');
+}
+
+// Get auth headers for JSON requests
 function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
+  const token = getToken();
   if (!token) {
     console.warn('[Auth] No admin token found in sessionStorage');
   }
@@ -38,8 +45,19 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
+// Handle auth errors - redirect to login
+function handleAuthError(router: ReturnType<typeof useRouter>, setError: (e: string) => void) {
+  sessionStorage.removeItem('adminAuth');
+  sessionStorage.removeItem('adminToken');
+  setError('Session expired. Redirecting to login...');
+  setTimeout(() => router.push('/admin/login'), 1500);
+}
+
 export default function ReceiveItemsPage() {
   const router = useRouter();
+
+  // Auth state
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Flow state
   const [step, setStep] = useState<'scan' | 'receipt' | 'review'>('scan');
@@ -63,6 +81,36 @@ export default function ReceiveItemsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Validate auth on page load
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      console.warn('[Auth] No token on page load, redirecting to login');
+      router.push('/admin/login');
+      return;
+    }
+
+    // Validate token with server
+    fetch('/api/admin/debug-auth', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          console.log('[Auth] Token valid');
+          setAuthChecked(true);
+        } else {
+          console.warn('[Auth] Token invalid:', data.error);
+          handleAuthError(router, setError);
+        }
+      })
+      .catch(err => {
+        console.error('[Auth] Validation error:', err);
+        setAuthChecked(true); // Allow page to load, will fail on first API call
+      });
+  }, [router]);
 
   // Handle barcode scan
   const handleScan = (barcode: string) => {
@@ -131,24 +179,27 @@ export default function ReceiveItemsPage() {
     setError(null);
 
     try {
-      // Create preview
+      // Create preview immediately
       const reader = new FileReader();
       reader.onload = (ev) => {
         setReceiptImage(ev.target?.result as string);
       };
       reader.readAsDataURL(file);
 
+      // Check token before upload
+      const token = getToken();
+      if (!token) {
+        handleAuthError(router, setError);
+        setReceiptUploading(false);
+        return;
+      }
+
       // Upload to Supabase
       const formData = new FormData();
       formData.append('file', file);
       formData.append('folder', 'receipts');
 
-      const token = sessionStorage.getItem('adminToken');
-      if (!token) {
-        setError('Session expired. Please log in again.');
-        setReceiptUploading(false);
-        return;
-      }
+      console.log('[Receive] Uploading receipt, token length:', token.length);
 
       const uploadRes = await fetch('/api/admin/upload', {
         method: 'POST',
@@ -156,6 +207,15 @@ export default function ReceiveItemsPage() {
         body: formData,
       });
       const uploadData = await uploadRes.json();
+
+      console.log('[Receive] Upload response:', uploadRes.status, uploadData);
+
+      // Handle auth errors specifically
+      if (uploadRes.status === 401) {
+        handleAuthError(router, setError);
+        setReceiptUploading(false);
+        return;
+      }
 
       if (!uploadData.url) {
         throw new Error(uploadData.error || 'Upload failed');
@@ -250,9 +310,9 @@ export default function ReceiveItemsPage() {
     setError(null);
 
     try {
-      const token = sessionStorage.getItem('adminToken');
+      const token = getToken();
       if (!token) {
-        setError('Session expired. Please log in again.');
+        handleAuthError(router, setError);
         setSaving(false);
         return;
       }
@@ -261,6 +321,8 @@ export default function ReceiveItemsPage() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       };
+
+      console.log('[Save] Creating purchase record...');
 
       // 1. Create purchase record
       const purchaseRes = await fetch('/api/admin/crud', {
@@ -281,6 +343,15 @@ export default function ReceiveItemsPage() {
       });
 
       const purchaseData = await purchaseRes.json();
+      console.log('[Save] Purchase response:', purchaseRes.status, purchaseData);
+
+      // Handle auth errors
+      if (purchaseRes.status === 401) {
+        handleAuthError(router, setError);
+        setSaving(false);
+        return;
+      }
+
       if (!purchaseRes.ok || !purchaseData.data?.id) {
         throw new Error(purchaseData.error || 'Failed to create purchase record');
       }
@@ -366,6 +437,19 @@ export default function ReceiveItemsPage() {
   };
 
   const totalItemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+  // Show loading while checking auth
+  if (!authChecked) {
+    return (
+      <AdminShell title="Receive Items">
+        <div className={styles.inventoryPage}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+            <div className={styles.spinner} />
+          </div>
+        </div>
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell title="Receive Items">
