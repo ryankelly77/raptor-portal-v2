@@ -1434,8 +1434,13 @@ export default function ReceiveItemsPage() {
 
             {/* Expiration hint */}
             {items.some(i => !i.expirationDate) && (
-              <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', color: '#92400e' }}>
-                💡 Adding expiration dates enables FIFO inventory management and spoilage alerts
+              <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                Adding expiration dates enables FIFO inventory management and spoilage alerts
               </div>
             )}
 
