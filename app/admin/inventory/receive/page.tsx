@@ -115,7 +115,8 @@ export default function ReceiveItemsPage() {
         setReceiptImageUrl(uploadData.url);
         setStep('verify');
       } else {
-        alert('Failed to upload receipt');
+        console.error('Upload failed:', uploadData);
+        alert(uploadData.error || uploadData.hint || 'Failed to upload receipt');
       }
     } catch (err) {
       console.error('Error uploading receipt:', err);

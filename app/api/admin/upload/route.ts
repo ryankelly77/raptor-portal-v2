@@ -65,8 +65,10 @@ export async function POST(request: NextRequest) {
       mimeType = reqContentType || 'application/octet-stream';
     }
 
+    console.log(`[Upload] Uploading to bucket: ${bucket}, path: ${filePath}, size: ${fileBuffer.length} bytes, type: ${mimeType}`);
+
     // Upload to storage
-    const { error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(filePath, fileBuffer, {
         upsert: true,
@@ -74,16 +76,28 @@ export async function POST(request: NextRequest) {
       });
 
     if (uploadError) {
-      console.error('Storage upload error:', uploadError);
+      console.error('[Upload] Storage upload error:', uploadError);
       // Check if bucket doesn't exist
-      if (uploadError.message.includes('not found') || uploadError.message.includes('does not exist')) {
+      if (uploadError.message.includes('not found') || uploadError.message.includes('does not exist') || uploadError.message.includes('Bucket')) {
         return NextResponse.json({
-          error: `Storage bucket "${bucket}" not found. Please create it in Supabase Storage.`,
-          hint: 'Go to Supabase > Storage > New bucket > Name: inventory > Public bucket: Yes'
+          error: `Storage bucket "${bucket}" not found or not accessible.`,
+          hint: 'Create bucket in Supabase > Storage > New bucket > Name: inventory > Public: Yes'
         }, { status: 500 });
       }
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+      // Check for policy errors
+      if (uploadError.message.includes('policy') || uploadError.message.includes('permission') || uploadError.message.includes('row-level')) {
+        return NextResponse.json({
+          error: 'Storage permission denied.',
+          hint: 'The bucket exists but needs proper policies. Check Supabase Storage policies.'
+        }, { status: 500 });
+      }
+      return NextResponse.json({
+        error: uploadError.message,
+        details: JSON.stringify(uploadError)
+      }, { status: 500 });
     }
+
+    console.log('[Upload] Success:', uploadData);
 
     // Get public URL
     const { data: urlData } = supabase.storage
