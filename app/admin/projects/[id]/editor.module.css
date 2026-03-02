@@ -123,6 +123,8 @@
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .formInput:focus,
@@ -134,6 +136,7 @@
 .formTextarea {
   min-height: 80px;
   resize: vertical;
+  width: 100%;
 }
 
 .formHint {
@@ -502,12 +505,25 @@
 .formRow {
   display: flex;
   gap: 12px;
+  width: 100%;
+}
+
+.formRow > input,
+.formRow > textarea,
+.formRow > select {
+  flex: 1;
 }
 
 .formRow.twoCol {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .checkboxRow {
