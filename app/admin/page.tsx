@@ -6,11 +6,12 @@ import Link from 'next/link';
 import { useAdminAuth } from '@/lib/contexts/AdminAuthContext';
 import styles from './admin.module.css';
 
-// Navigation items - renamed Projects to Installs
+// Navigation items
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
-  { href: '/admin/projects', label: 'Installs', icon: 'projects' },
+  { href: '/admin/projects', label: 'Projects', icon: 'projects' },
   { href: '/admin/property-managers', label: 'Property Managers', icon: 'users' },
+  { href: '/admin/inventory', label: 'Inventory', icon: 'inventory' },
   { href: '/admin/messages', label: 'Messages', icon: 'messages', badge: 0 },
   { href: '/admin/documents', label: 'Documents', icon: 'documents' },
   { href: '/admin/templates', label: 'Email Templates', icon: 'templates' },
@@ -105,6 +106,14 @@ function NavIcon({ name }: { name: string }) {
       return (
         <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+        </svg>
+      );
+    case 'inventory':
+      return (
+        <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
         </svg>
       );
     case 'database':

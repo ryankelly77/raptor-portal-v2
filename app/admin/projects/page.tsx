@@ -20,7 +20,14 @@ import adminStyles from '../admin.module.css';
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
   { href: '/admin/projects', label: 'Projects', icon: 'projects' },
+  { href: '/admin/property-managers', label: 'Property Managers', icon: 'users' },
+  { href: '/admin/inventory', label: 'Inventory', icon: 'inventory' },
   { href: '/admin/messages', label: 'Messages', icon: 'messages' },
+  { href: '/admin/documents', label: 'Documents', icon: 'documents' },
+  { href: '/admin/templates', label: 'Email Templates', icon: 'templates' },
+  { href: '/admin/activity', label: 'Activity Log', icon: 'activity' },
+  { href: '/admin/temperature', label: 'Temp Logs', icon: 'temperature' },
+  { href: '/admin/migrations', label: 'Migrations', icon: 'database' },
 ];
 
 function NavIcon({ name }: { name: string }) {
@@ -60,6 +67,48 @@ function NavIcon({ name }: { name: string }) {
       return (
         <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      );
+    case 'inventory':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+      );
+    case 'documents':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      );
+    case 'templates':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+          <polyline points="22,6 12,13 2,6" />
+        </svg>
+      );
+    case 'activity':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      );
+    case 'temperature':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+        </svg>
+      );
+    case 'database':
+      return (
+        <svg className={adminStyles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <ellipse cx="12" cy="5" rx="9" ry="3" />
+          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
         </svg>
       );
     default:
