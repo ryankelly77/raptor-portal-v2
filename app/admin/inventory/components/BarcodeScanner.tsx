@@ -8,13 +8,34 @@ interface BarcodeScannerProps {
   onClose?: () => void;
 }
 
+// Declare BarcodeDetector types for TypeScript
+declare global {
+  interface BarcodeDetectorOptions {
+    formats: string[];
+  }
+  interface DetectedBarcode {
+    rawValue: string;
+    format: string;
+  }
+  class BarcodeDetector {
+    constructor(options?: BarcodeDetectorOptions);
+    detect(image: ImageBitmapSource): Promise<DetectedBarcode[]>;
+    static getSupportedFormats(): Promise<string[]>;
+  }
+}
+
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [status, setStatus] = useState<'loading' | 'scanning' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState('');
   const [showTips, setShowTips] = useState(false);
-  const [lastScanned, setLastScanned] = useState<string | null>(null);
+  const [useNativeDetector, setUseNativeDetector] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const scannerRef = useRef<any>(null);
+  const detectorRef = useRef<BarcodeDetector | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const tipsTimerRef = useRef<NodeJS.Timeout | null>(null);
   const containerId = 'barcode-scanner-view';
 
@@ -22,6 +43,14 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     if (tipsTimerRef.current) {
       clearTimeout(tipsTimerRef.current);
       tipsTimerRef.current = null;
+    }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
     if (scannerRef.current) {
       try {
@@ -33,16 +62,142 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     }
   }, []);
 
+  // Native BarcodeDetector scanning loop
+  const startNativeScanning = useCallback(async () => {
+    if (!videoRef.current || !canvasRef.current || !detectorRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const scan = async () => {
+      if (!video.videoWidth || !video.videoHeight) {
+        animationRef.current = requestAnimationFrame(scan);
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // Draw video frame to canvas
+      ctx.drawImage(video, 0, 0);
+
+      try {
+        const barcodes = await detectorRef.current!.detect(canvas);
+        if (barcodes.length > 0) {
+          const barcode = barcodes[0];
+          // Success! Vibrate and beep
+          if (navigator.vibrate) {
+            navigator.vibrate(200);
+          }
+          playBeep();
+          stopScanner();
+          onScan(barcode.rawValue);
+          return;
+        }
+      } catch (e) {
+        // Detection error, continue scanning
+      }
+
+      animationRef.current = requestAnimationFrame(scan);
+    };
+
+    scan();
+  }, [onScan, stopScanner]);
+
+  // Play beep sound
+  function playBeep() {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.frequency.value = 1200;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.3;
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (e) {
+      // Audio not supported
+    }
+  }
+
   useEffect(() => {
     let mounted = true;
 
     const startScanner = async () => {
+      // Check if native BarcodeDetector is available
+      const hasNativeDetector = 'BarcodeDetector' in window;
+
+      if (hasNativeDetector) {
+        try {
+          const formats = await BarcodeDetector.getSupportedFormats();
+          const neededFormats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
+          const supportedFormats = neededFormats.filter(f => formats.includes(f));
+
+          if (supportedFormats.length > 0) {
+            // Use native BarcodeDetector
+            setUseNativeDetector(true);
+
+            detectorRef.current = new BarcodeDetector({
+              formats: supportedFormats,
+            });
+
+            // Get camera stream
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                  facingMode: 'environment',
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 },
+                },
+              });
+
+              if (!mounted) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
+              }
+
+              streamRef.current = stream;
+
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play();
+
+                if (mounted) {
+                  setStatus('scanning');
+                  startNativeScanning();
+
+                  // Show tips after 10 seconds
+                  tipsTimerRef.current = setTimeout(() => {
+                    if (mounted) setShowTips(true);
+                  }, 10000);
+                }
+              }
+              return;
+            } catch (err: any) {
+              console.error('Camera error:', err);
+              if (err?.name === 'NotAllowedError') {
+                setErrorMsg('Camera permission denied. Please allow camera access.');
+                setStatus('error');
+                return;
+              }
+              // Fall through to html5-qrcode
+            }
+          }
+        } catch (e) {
+          console.log('Native BarcodeDetector not fully supported, falling back');
+        }
+      }
+
+      // Fallback to html5-qrcode
       try {
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
 
         if (!mounted) return;
 
-        // Get cameras
         const devices = await Html5Qrcode.getCameras();
 
         if (!devices || devices.length === 0) {
@@ -51,7 +206,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           return;
         }
 
-        // Prefer back camera
         const backCamera = devices.find(
           (d) =>
             d.label.toLowerCase().includes('back') ||
@@ -60,7 +214,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         );
         const cameraId = backCamera?.id || devices[0].id;
 
-        // Explicitly define all barcode formats to support
         const formatsToSupport = [
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
@@ -71,66 +224,38 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           Html5QrcodeSupportedFormats.ITF,
         ];
 
-        // Create scanner with explicit formats
         const scanner = new Html5Qrcode(containerId, {
           formatsToSupport,
           verbose: false,
         });
         scannerRef.current = scanner;
 
-        // Calculate dimensions - wide rectangle for barcodes
-        const containerEl = document.getElementById(containerId);
-        const containerWidth = containerEl?.clientWidth || 320;
-        const qrboxWidth = Math.min(Math.floor(containerWidth * 0.85), 300);
-        const qrboxHeight = Math.floor(qrboxWidth * 0.35); // Wide rectangle for barcodes
-
+        // Use square scanning region for better orientation handling
+        // Or scan full frame by not restricting qrbox
         await scanner.start(
           cameraId,
           {
             fps: 10,
-            qrbox: { width: qrboxWidth, height: qrboxHeight },
-            aspectRatio: 1.777, // 16:9
-            disableFlip: false,
+            aspectRatio: 1.0, // Square aspect for orientation-agnostic scanning
+            disableFlip: false, // Allow reading flipped/mirrored codes
           },
           (decodedText) => {
-            // Success! Vibrate and show feedback
             if (navigator.vibrate) {
               navigator.vibrate(200);
             }
-
-            // Try to play a beep sound
-            try {
-              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioContext.createOscillator();
-              const gainNode = audioContext.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              oscillator.frequency.value = 1200;
-              oscillator.type = 'sine';
-              gainNode.gain.value = 0.3;
-              oscillator.start();
-              oscillator.stop(audioContext.currentTime + 0.1);
-            } catch (e) {
-              // Audio not supported, ignore
-            }
-
-            setLastScanned(decodedText);
+            playBeep();
             stopScanner();
             onScan(decodedText);
           },
           () => {
-            // Ignore - no barcode found in frame
+            // No barcode found in frame
           }
         );
 
         if (mounted) {
           setStatus('scanning');
-
-          // Show tips after 10 seconds of no scan
           tipsTimerRef.current = setTimeout(() => {
-            if (mounted) {
-              setShowTips(true);
-            }
+            if (mounted) setShowTips(true);
           }, 10000);
         }
       } catch (err: any) {
@@ -152,7 +277,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       mounted = false;
       stopScanner();
     };
-  }, [onScan, stopScanner]);
+  }, [onScan, stopScanner, startNativeScanning]);
 
   function handleManualSubmit() {
     const barcode = manualBarcode.trim();
@@ -181,7 +306,44 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           position: 'relative',
         }}
       >
-        <div id={containerId} style={{ width: '100%' }} />
+        {/* Native detector uses video element */}
+        {useNativeDetector && (
+          <>
+            <video
+              ref={videoRef}
+              style={{
+                width: '100%',
+                height: '280px',
+                objectFit: 'cover',
+              }}
+              playsInline
+              muted
+            />
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            {/* Scan region overlay */}
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                width: '80%',
+                height: '100px',
+                border: '3px solid #FF580F',
+                borderRadius: '8px',
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.4)',
+              }} />
+            </div>
+          </>
+        )}
+
+        {/* html5-qrcode container */}
+        {!useNativeDetector && (
+          <div id={containerId} style={{ width: '100%' }} />
+        )}
 
         {status === 'loading' && (
           <div style={{
@@ -198,7 +360,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           </div>
         )}
 
-        {/* Scanning overlay with viewfinder hint */}
         {status === 'scanning' && (
           <div style={{
             position: 'absolute',
@@ -221,7 +382,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
               borderRadius: '50%',
               animation: 'pulse 1.5s infinite',
             }} />
-            Scanning... Position barcode in frame
+            Scanning... Any orientation works
           </div>
         )}
       </div>
@@ -237,11 +398,10 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           marginBottom: '16px',
           fontWeight: 500,
         }}>
-          Align barcode within the rectangle
+          Point camera at barcode (any direction)
         </div>
       )}
 
-      {/* Tips after 10 seconds */}
       {status === 'scanning' && showTips && (
         <div style={{
           padding: '12px',
@@ -256,8 +416,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             <li>Hold barcode 6-8 inches from camera</li>
             <li>Keep phone and barcode steady</li>
             <li>Ensure good lighting</li>
-            <li>Keep barcode flat, not curved</li>
-            <li>Try landscape orientation</li>
+            <li>Works upside down too!</li>
           </ul>
         </div>
       )}
@@ -274,7 +433,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         </div>
       )}
 
-      {/* Manual Entry - always visible */}
+      {/* Manual Entry */}
       <div className={styles.manualEntry}>
         <input
           type="text"
@@ -307,7 +466,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         </button>
       )}
 
-      {/* CSS for pulse animation */}
       <style jsx global>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }

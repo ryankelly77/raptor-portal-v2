@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AdminShell } from '../../components/AdminShell';
+import { BrandNormalizer } from '../components/BrandNormalizer';
 import styles from '../inventory.module.css';
 
 interface Product {
@@ -31,6 +32,7 @@ export default function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'snack' | 'beverage' | 'meal'>('all');
   const [brandFilter, setBrandFilter] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
+  const [showNormalizer, setShowNormalizer] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
     brand: '',
@@ -223,13 +225,22 @@ export default function ProductsPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button className={styles.addButton} onClick={openAddModal}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add Product
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className={styles.btnSecondary}
+              onClick={() => setShowNormalizer(true)}
+              style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}
+            >
+              Normalize Brands
+            </button>
+            <button className={styles.addButton} onClick={openAddModal}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add
+            </button>
+          </div>
         </div>
 
         {/* Category Tabs */}
@@ -404,6 +415,17 @@ export default function ProductsPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Brand Normalizer Modal */}
+        {showNormalizer && (
+          <BrandNormalizer
+            onClose={() => setShowNormalizer(false)}
+            onComplete={() => {
+              setShowNormalizer(false);
+              loadProducts();
+            }}
+          />
         )}
       </div>
     </AdminShell>

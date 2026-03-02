@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import styles from '../inventory.module.css';
 
 interface Product {
@@ -28,6 +28,11 @@ interface LookupResult {
   existingProduct?: Product;
 }
 
+interface BrandWithCount {
+  brand: string;
+  count: number;
+}
+
 interface BarcodeLookupProps {
   barcode: string;
   onResult: (result: LookupResult) => void;
@@ -44,91 +49,22 @@ function getAuthHeaders(): HeadersInit {
 
 // Common brands to detect and extract from product names
 const KNOWN_BRANDS = [
-  'Black Rifle',
-  'Monster',
-  'Red Bull',
-  'Celsius',
-  'Prime',
-  'Gatorade',
-  'Powerade',
-  'Coca-Cola',
-  'Pepsi',
-  'Dr Pepper',
-  'Mountain Dew',
-  'Sprite',
-  'Fanta',
-  'Cheetos',
-  'Doritos',
-  'Lays',
-  'Pringles',
-  'Oreo',
-  'Snickers',
-  'M&M',
-  'Reese',
-  'Kit Kat',
-  'Twix',
-  'Skittles',
-  'Starburst',
-  'Takis',
-  'Hot Cheetos',
-  'Smartfood',
-  'SunChips',
-  'Ruffles',
-  'Tostitos',
-  'Fritos',
-  'Funyuns',
-  'Hostess',
-  'Little Debbie',
-  'Kellogg',
-  'General Mills',
-  'Quaker',
-  'Nature Valley',
-  'KIND',
-  'RXBAR',
-  'Clif',
-  'Quest',
-  'Premier Protein',
-  'Muscle Milk',
-  'Fairlife',
-  'Core Power',
-  'Reign',
-  'Bang',
-  'Ghost',
-  'C4',
-  'Alani Nu',
-  '3D Energy',
-  'ZOA',
-  'Rockstar',
-  'NOS',
-  'Full Throttle',
-  'Amp',
-  'Starbucks',
-  'Dunkin',
-  'International Delight',
-  'Coffee Mate',
-  'Nestle',
-  'Hershey',
-  "Jack Link's",
-  'Slim Jim',
-  'Duke',
-  'Oberto',
-  'Tillamook',
-  'Old Wisconsin',
-  'Combos',
-  'Goldfish',
-  'Cheez-It',
-  'Wheat Thins',
-  'Triscuit',
-  'Ritz',
-  'Nabisco',
-  'Keebler',
-  'Famous Amos',
-  'Chips Ahoy',
-  'Nutter Butter',
-  'Belvita',
-  'Pop-Tarts',
-  'Nutri-Grain',
-  'Special K',
+  'Black Rifle', 'Black Rifle Coffee Company',
+  'Monster', 'Red Bull', 'Celsius', 'Prime', 'Gatorade', 'Powerade',
+  'Coca-Cola', 'Pepsi', 'Dr Pepper', 'Mountain Dew', 'Sprite', 'Fanta',
+  'Cheetos', 'Doritos', 'Lays', 'Pringles', 'Oreo', 'Snickers', 'M&M',
+  'Reese', 'Kit Kat', 'Twix', 'Skittles', 'Starburst', 'Takis',
+  'Hot Cheetos', 'Smartfood', 'SunChips', 'Ruffles', 'Tostitos', 'Fritos',
+  'Funyuns', 'Hostess', 'Little Debbie', 'Kellogg', 'General Mills',
+  'Quaker', 'Nature Valley', 'KIND', 'RXBAR', 'Clif', 'Quest',
+  'Premier Protein', 'Muscle Milk', 'Fairlife', 'Core Power', 'Reign',
+  'Bang', 'Ghost', 'C4', 'Alani Nu', '3D Energy', 'ZOA', 'Rockstar',
+  'NOS', 'Full Throttle', 'Amp', 'Starbucks', 'Dunkin',
+  'International Delight', 'Coffee Mate', 'Nestle', 'Hershey',
+  "Jack Link's", 'Slim Jim', 'Duke', 'Oberto', 'Tillamook',
+  'Old Wisconsin', 'Combos', 'Goldfish', 'Cheez-It', 'Wheat Thins',
+  'Triscuit', 'Ritz', 'Nabisco', 'Keebler', 'Famous Amos', 'Chips Ahoy',
+  'Nutter Butter', 'Belvita', 'Pop-Tarts', 'Nutri-Grain', 'Special K',
   'Fiber One',
 ];
 
@@ -149,10 +85,69 @@ function extractBrandFromName(fullName: string): { brand: string | null; name: s
   return { brand: null, name: fullName };
 }
 
+// Fuzzy match brands
+function findBrandMatch(incomingBrand: string, existingBrands: BrandWithCount[]): {
+  match: string | null;
+  matchType: 'exact' | 'contains' | 'similar' | 'none';
+  suggestions: string[];
+} {
+  if (!incomingBrand) return { match: null, matchType: 'none', suggestions: [] };
+
+  const incomingLower = incomingBrand.toLowerCase().trim();
+  const incomingWords = incomingLower.split(/\s+/);
+
+  // Exact match
+  const exactMatch = existingBrands.find(b => b.brand.toLowerCase() === incomingLower);
+  if (exactMatch) {
+    return { match: exactMatch.brand, matchType: 'exact', suggestions: [] };
+  }
+
+  // Contains match - prefer the longer/more complete brand
+  const containsMatches = existingBrands.filter(b => {
+    const existingLower = b.brand.toLowerCase();
+    return existingLower.includes(incomingLower) || incomingLower.includes(existingLower);
+  });
+
+  if (containsMatches.length > 0) {
+    // Sort by length descending (prefer longer, more complete names)
+    const sortedMatches = containsMatches.sort((a, b) => b.brand.length - a.brand.length);
+    return {
+      match: sortedMatches[0].brand,
+      matchType: 'contains',
+      suggestions: sortedMatches.map(m => m.brand),
+    };
+  }
+
+  // Similar start (first word matches)
+  const firstWord = incomingWords[0];
+  const similarMatches = existingBrands.filter(b => {
+    const existingWords = b.brand.toLowerCase().split(/\s+/);
+    return existingWords[0] === firstWord;
+  });
+
+  if (similarMatches.length > 0) {
+    return {
+      match: null,
+      matchType: 'similar',
+      suggestions: similarMatches.map(m => m.brand),
+    };
+  }
+
+  return { match: null, matchType: 'none', suggestions: [] };
+}
+
 export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupProps) {
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [existingBrands, setExistingBrands] = useState<BrandWithCount[]>([]);
+  const [brandMatch, setBrandMatch] = useState<{
+    matchType: 'exact' | 'contains' | 'similar' | 'none';
+    suggestions: string[];
+  } | null>(null);
+  const [showBrandDropdown, setShowBrandDropdown] = useState(false);
+  const [brandSearch, setBrandSearch] = useState('');
+  const brandInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     brand: '',
     name: '',
@@ -162,9 +157,43 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
   });
   const [saving, setSaving] = useState(false);
 
+  // Fetch existing brands on mount
+  useEffect(() => {
+    async function fetchBrands() {
+      try {
+        const res = await fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'products', action: 'read' }),
+        });
+        const data = await res.json();
+        const products: Product[] = data.data || [];
+
+        // Count products per brand
+        const brandCounts: Record<string, number> = {};
+        products.forEach(p => {
+          if (p.brand) {
+            brandCounts[p.brand] = (brandCounts[p.brand] || 0) + 1;
+          }
+        });
+
+        // Convert to array and sort by count descending
+        const brandsWithCount: BrandWithCount[] = Object.entries(brandCounts)
+          .map(([brand, count]) => ({ brand, count }))
+          .sort((a, b) => b.count - a.count);
+
+        setExistingBrands(brandsWithCount);
+      } catch (err) {
+        console.error('Error fetching brands:', err);
+      }
+    }
+    fetchBrands();
+  }, []);
+
   const lookupBarcode = useCallback(async () => {
     setLoading(true);
     setResult(null);
+    setBrandMatch(null);
 
     try {
       // Step 1: Check database first
@@ -233,6 +262,17 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             }
           }
 
+          // Try to normalize brand against existing brands
+          let normalizedBrand = apiBrand;
+          if (apiBrand && existingBrands.length > 0) {
+            const match = findBrandMatch(apiBrand, existingBrands);
+            setBrandMatch({ matchType: match.matchType, suggestions: match.suggestions });
+
+            if (match.match && (match.matchType === 'exact' || match.matchType === 'contains')) {
+              normalizedBrand = match.match;
+            }
+          }
+
           // Try to determine category from Open Food Facts categories
           let category: 'snack' | 'beverage' | 'meal' = 'snack';
           const categories = (p.categories_tags || []).join(' ').toLowerCase();
@@ -268,7 +308,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             product: {
               barcode,
               name: productName,
-              brand: apiBrand || null,
+              brand: normalizedBrand || null,
               category,
               image_url: p.image_front_small_url || p.image_url || null,
               default_price: null,
@@ -283,6 +323,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
             image_url: lookupResult.product.image_url || '',
             default_price: '',
           });
+          setBrandSearch(lookupResult.product.brand || '');
           onResult(lookupResult);
           setLoading(false);
           return;
@@ -312,6 +353,7 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
         image_url: '',
         default_price: '',
       });
+      setBrandSearch('');
       setEditMode(true);
       onResult(lookupResult);
     } catch (err) {
@@ -319,13 +361,24 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
     } finally {
       setLoading(false);
     }
-  }, [barcode, onResult]);
+  }, [barcode, onResult, existingBrands]);
 
   useEffect(() => {
-    if (barcode) {
+    if (barcode && existingBrands !== null) {
       lookupBarcode();
     }
-  }, [barcode, lookupBarcode]);
+  }, [barcode, lookupBarcode, existingBrands]);
+
+  // Filter brands for dropdown
+  const filteredBrands = existingBrands.filter(b =>
+    b.brand.toLowerCase().includes(brandSearch.toLowerCase())
+  );
+
+  function handleBrandSelect(brand: string) {
+    setFormData({ ...formData, brand });
+    setBrandSearch(brand);
+    setShowBrandDropdown(false);
+  }
 
   async function handleSave() {
     if (!formData.name.trim()) {
@@ -432,27 +485,80 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
       </div>
 
       {!editMode && result.source === 'openfoodfacts' && (
-        <div className={styles.lookupProduct}>
-          <div className={styles.lookupImage}>
-            {result.product.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={result.product.image_url} alt={result.product.name} />
-            ) : (
-              <span style={{ fontSize: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>📦</span>
-            )}
+        <>
+          <div className={styles.lookupProduct}>
+            <div className={styles.lookupImage}>
+              {result.product.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={result.product.image_url} alt={result.product.name} />
+              ) : (
+                <span style={{ fontSize: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>📦</span>
+              )}
+            </div>
+            <div className={styles.lookupInfo}>
+              {formData.brand && (
+                <div className={styles.lookupBrand}>{formData.brand}</div>
+              )}
+              <div className={styles.lookupName}>{formData.name}</div>
+              <div className={styles.lookupBarcode}>{result.product.barcode}</div>
+              <span className={`${styles.categoryBadge} ${styles[formData.category]}`}>
+                {formData.category}
+              </span>
+              <div className={styles.lookupSource}>Found on Open Food Facts</div>
+            </div>
           </div>
-          <div className={styles.lookupInfo}>
-            {result.product.brand && (
-              <div className={styles.lookupBrand}>{result.product.brand}</div>
-            )}
-            <div className={styles.lookupName}>{result.product.name}</div>
-            <div className={styles.lookupBarcode}>{result.product.barcode}</div>
-            <span className={`${styles.categoryBadge} ${styles[result.product.category]}`}>
-              {result.product.category}
-            </span>
-            <div className={styles.lookupSource}>Found on Open Food Facts</div>
-          </div>
-        </div>
+
+          {/* Brand match notification */}
+          {brandMatch && brandMatch.matchType === 'contains' && (
+            <div style={{
+              marginTop: '12px',
+              padding: '10px 12px',
+              background: '#dcfce7',
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: '#16a34a',
+            }}>
+              ✓ Matched to existing brand: <strong>{formData.brand}</strong>
+            </div>
+          )}
+
+          {brandMatch && brandMatch.matchType === 'similar' && brandMatch.suggestions.length > 0 && (
+            <div style={{
+              marginTop: '12px',
+              padding: '12px',
+              background: '#fef3c7',
+              borderRadius: '8px',
+              fontSize: '13px',
+            }}>
+              <div style={{ color: '#92400e', marginBottom: '8px' }}>
+                Similar brand found. Did you mean:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {brandMatch.suggestions.map(suggestion => (
+                  <button
+                    key={suggestion}
+                    onClick={() => {
+                      setFormData({ ...formData, brand: suggestion });
+                      setBrandSearch(suggestion);
+                      setBrandMatch({ ...brandMatch, matchType: 'exact' });
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#fff',
+                      border: '1px solid #d97706',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      color: '#92400e',
+                    }}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {(editMode || result.source === 'manual') && (
@@ -462,16 +568,63 @@ export function BarcodeLookup({ barcode, onResult, onSaveNew }: BarcodeLookupPro
               Product not found. Please enter details:
             </p>
           )}
-          <div className={styles.formGroup}>
+
+          {/* Brand combo box */}
+          <div className={styles.formGroup} style={{ position: 'relative' }}>
             <label className={styles.formLabel}>Brand</label>
             <input
+              ref={brandInputRef}
               type="text"
               className={styles.formInput}
-              value={formData.brand}
-              onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-              placeholder="Brand name (e.g., Black Rifle, Monster)"
+              value={brandSearch}
+              onChange={(e) => {
+                setBrandSearch(e.target.value);
+                setFormData({ ...formData, brand: e.target.value });
+                setShowBrandDropdown(true);
+              }}
+              onFocus={() => setShowBrandDropdown(true)}
+              onBlur={() => setTimeout(() => setShowBrandDropdown(false), 200)}
+              placeholder="Type to search or enter new brand..."
             />
+            {showBrandDropdown && filteredBrands.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                background: '#fff',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                maxHeight: '200px',
+                overflow: 'auto',
+                zIndex: 10,
+              }}>
+                {filteredBrands.map(b => (
+                  <div
+                    key={b.brand}
+                    onClick={() => handleBrandSelect(b.brand)}
+                    style={{
+                      padding: '10px 14px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #f3f4f6',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+                  >
+                    <span style={{ fontWeight: 500 }}>{b.brand}</span>
+                    <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                      {b.count} product{b.count !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
+
           <div className={styles.formGroup}>
             <label className={styles.formLabel}>Name *</label>
             <input
