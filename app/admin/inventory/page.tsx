@@ -7,17 +7,27 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR02-A';
+const BUILD_VERSION = 'v2024-MAR02-B';
 
 interface Product {
   id: string;
   name: string;
   barcode: string;
   category: string;
+  default_price: number | null;
   // Package quantities
   units_per_package?: number;
   unit_name?: string;
   package_name?: string;
+}
+
+interface PurchaseItem {
+  id: string;
+  purchase_id: string;
+  product_id: string;
+  quantity: number;
+  unit_cost: number | null;
+  created_at: string;
 }
 
 interface Movement {
@@ -56,11 +66,21 @@ export default function InventoryPage() {
       setLoading(true);
       setError(null);
 
-      // Load products
-      const productsRes = await adminFetch('/api/admin/crud', {
-        method: 'POST',
-        body: JSON.stringify({ table: 'products', action: 'read' }),
-      });
+      // Load products, movements, and purchase items in parallel
+      const [productsRes, movementsRes, purchaseItemsRes] = await Promise.all([
+        adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({ table: 'products', action: 'read' }),
+        }),
+        adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({ table: 'inventory_movements', action: 'read' }),
+        }),
+        adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({ table: 'inventory_purchase_items', action: 'read' }),
+        }),
+      ]);
 
       if (!productsRes.ok) {
         const errData = await productsRes.json();
@@ -71,16 +91,28 @@ export default function InventoryPage() {
       const productsList: Product[] = productsData.data || [];
       setProducts(productsList);
 
-      // Load movements
-      const movementsRes = await adminFetch('/api/admin/crud', {
-        method: 'POST',
-        body: JSON.stringify({ table: 'inventory_movements', action: 'read' }),
-      });
       const movementsData = await movementsRes.json();
       const movementsList: Movement[] = movementsData.data || [];
 
-      // Map products to movements
+      const purchaseItemsData = await purchaseItemsRes.json();
+      const purchaseItemsList: PurchaseItem[] = purchaseItemsData.data || [];
+
+      // Map products
       const productsMap = new Map(productsList.map(p => [p.id, p]));
+
+      // Build a map of most recent purchase cost per product
+      // Sort by created_at descending to get most recent first
+      const sortedPurchaseItems = [...purchaseItemsList].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      const productCostMap = new Map<string, number>();
+      for (const item of sortedPurchaseItems) {
+        if (!productCostMap.has(item.product_id) && item.unit_cost !== null) {
+          productCostMap.set(item.product_id, item.unit_cost);
+        }
+      }
+
+      // Map products to movements for display
       const movementsWithProducts = movementsList.map(m => ({
         ...m,
         product: productsMap.get(m.product_id),
@@ -88,50 +120,79 @@ export default function InventoryPage() {
 
       setRecentMovements(movementsWithProducts.slice(0, 20));
 
-      // Calculate stats (in individual units, not packages)
-      let onHand = 0;
-      let available = 0;
+      // Calculate per-product on-hand quantities (in individual units)
+      const productOnHand = new Map<string, number>();
+      const productInMachine = new Map<string, number>();
 
       console.log('[Inventory] Processing', movementsList.length, 'movements');
 
       for (const m of movementsList) {
-        // Get units per package for this product (default to 1 if not set)
         const product = productsMap.get(m.product_id);
         const unitsPerPkg = product?.units_per_package || 1;
+        const currentOnHand = productOnHand.get(m.product_id) || 0;
+        const currentInMachine = productInMachine.get(m.product_id) || 0;
 
         switch (m.movement_type) {
           case 'purchase_in':
             // Purchases are in packages, convert to units
-            onHand += m.quantity * unitsPerPkg;
-            console.log('[Inventory] purchase_in:', m.quantity, 'x', unitsPerPkg, '=', m.quantity * unitsPerPkg, 'total onHand:', onHand);
+            productOnHand.set(m.product_id, currentOnHand + (m.quantity * unitsPerPkg));
             break;
           case 'restock_out':
-            // Restocking to machine (packages)
-            onHand -= m.quantity * unitsPerPkg;
+            // Sending packages to machine
+            productOnHand.set(m.product_id, currentOnHand - (m.quantity * unitsPerPkg));
             break;
           case 'restock_in':
             // Loaded into machine (packages become available as units)
-            available += m.quantity * unitsPerPkg;
+            productInMachine.set(m.product_id, currentInMachine + (m.quantity * unitsPerPkg));
             break;
           case 'sold':
           case 'shrinkage':
-            // Sales/shrinkage are individual units
-            available -= m.quantity;
+            // Sales/shrinkage are individual units from machine
+            productInMachine.set(m.product_id, currentInMachine - m.quantity);
             break;
           case 'adjustment':
-            // Adjustments are in individual units
-            onHand += m.quantity;
+            // Adjustments are in individual units to on-hand
+            productOnHand.set(m.product_id, currentOnHand + m.quantity);
             break;
         }
       }
 
-      console.log('[Inventory] Final stats:', { onHand, available });
+      // Calculate totals
+      let totalOnHand = 0;
+      let totalInMachine = 0;
+      let totalValue = 0;
+
+      for (const [productId, onHandQty] of productOnHand) {
+        const qty = Math.max(0, onHandQty);
+        totalOnHand += qty;
+
+        // Calculate value using purchase cost or default price
+        const purchaseCost = productCostMap.get(productId);
+        const product = productsMap.get(productId);
+        const unitCost = purchaseCost ?? product?.default_price ?? 0;
+        totalValue += qty * unitCost;
+      }
+
+      for (const [, inMachineQty] of productInMachine) {
+        totalInMachine += Math.max(0, inMachineQty);
+      }
+
+      // Also add value for items in machines
+      for (const [productId, inMachineQty] of productInMachine) {
+        const qty = Math.max(0, inMachineQty);
+        const purchaseCost = productCostMap.get(productId);
+        const product = productsMap.get(productId);
+        const unitCost = purchaseCost ?? product?.default_price ?? 0;
+        totalValue += qty * unitCost;
+      }
+
+      console.log('[Inventory] Final stats:', { totalOnHand, totalInMachine, totalValue });
 
       setStats({
         totalProducts: productsList.length,
-        onHandQty: Math.max(0, onHand),
-        availableQty: Math.max(0, available),
-        totalValue: 0, // TODO: Calculate based on product prices
+        onHandQty: totalOnHand,
+        availableQty: totalInMachine,
+        totalValue: Math.round(totalValue * 100) / 100, // Round to 2 decimals
       });
     } catch (err) {
       console.error('Error loading inventory data:', err);
