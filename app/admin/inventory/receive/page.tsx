@@ -679,8 +679,8 @@ export default function ReceiveItemsPage() {
           purchaseItemId = purchaseItemData.data?.id || null;
         }
 
-        // Create inventory movement (quantity is in PACKAGES for movements)
-        // The dashboard calculates: packages × units_per_package to get total units
+        // Create inventory movement (quantity is in UNITS, not packages)
+        // This allows the dashboard to directly use the quantity without conversion
         const movementRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
@@ -688,7 +688,7 @@ export default function ReceiveItemsPage() {
             action: 'create',
             data: {
               product_id: productId,
-              quantity: packageQty, // Packages (dashboard multiplies by units_per_package)
+              quantity: totalUnits, // Store as UNITS (e.g., 6 cans, not 1 package)
               movement_type: 'purchase_in',
               moved_by: purchasedBy,
               notes: `Received from ${storeName}${unitsPerPkg > 1 ? ` (${packageQty} pkg × ${unitsPerPkg} = ${totalUnits} units)` : ''}`,
@@ -704,7 +704,7 @@ export default function ReceiveItemsPage() {
           throw new Error(`Failed to create movement: ${errData.error || 'Unknown error'}`);
         } else {
           const movementData = await movementRes.json();
-          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', packageQty, 'pkgs (', totalUnits, 'units)', 'exp:', item.expirationDate);
+          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', totalUnits, 'units', 'exp:', item.expirationDate);
         }
       }
 
