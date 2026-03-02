@@ -12,6 +12,9 @@ interface Product {
   category: 'snack' | 'beverage' | 'meal';
   default_price: number | null;
   image_url: string | null;
+  units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
 }
 
 interface BrandInfo {
@@ -29,6 +32,9 @@ interface LookupResult {
     category: 'snack' | 'beverage' | 'meal';
     image_url: string | null;
     default_price: number | null;
+    units_per_package?: number;
+    unit_name?: string;
+    package_name?: string;
   };
   existingProduct?: Product;
 }
@@ -37,6 +43,9 @@ interface BarcodeLookupProps {
   barcode: string;
   onResult: (result: LookupResult) => void;
 }
+
+const PACKAGE_OPTIONS = ['each', 'pack', 'case', 'box', 'bag', 'carton', 'tray'];
+const UNIT_OPTIONS = ['each', 'can', 'bottle', 'cup', 'bag', 'bar', 'piece'];
 
 // Find similar brand in existing brands
 function findSimilarBrand(incoming: string, existingBrands: BrandInfo[]): BrandInfo | null {
@@ -67,6 +76,31 @@ function findSimilarBrand(incoming: string, existingBrands: BrandInfo[]): BrandI
   return null;
 }
 
+// Parse units from product name (e.g., "6pk", "12 pack", "36ct")
+function parseUnitsFromName(name: string): { units: number; detected: boolean } {
+  const patterns = [
+    /(\d+)\s*pk\b/i,           // 6pk, 12 pk
+    /(\d+)\s*pack/i,           // 6 pack, 12pack
+    /(\d+)\s*ct\b/i,           // 36ct
+    /(\d+)\s*count/i,          // 36 count
+    /(\d+)\s*x\s*\d/i,         // 6 x 12oz
+    /pack\s*of\s*(\d+)/i,      // pack of 6
+    /(\d+)\s*-\s*pack/i,       // 6-pack
+  ];
+
+  for (const pattern of patterns) {
+    const match = name.match(pattern);
+    if (match) {
+      const units = parseInt(match[1]);
+      if (units > 1 && units <= 100) {
+        return { units, detected: true };
+      }
+    }
+  }
+
+  return { units: 1, detected: false };
+}
+
 export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +115,9 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
     category: 'snack' as 'snack' | 'beverage' | 'meal',
     image_url: '',
     default_price: '',
+    units_per_package: '1',
+    unit_name: 'each',
+    package_name: 'each',
   });
 
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
@@ -133,6 +170,9 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
             category: existingProduct.category,
             image_url: existingProduct.image_url,
             default_price: existingProduct.default_price,
+            units_per_package: existingProduct.units_per_package,
+            unit_name: existingProduct.unit_name,
+            package_name: existingProduct.package_name,
           },
           existingProduct,
         };
@@ -175,6 +215,20 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
             category = 'meal';
           }
 
+          // Parse units from product name
+          const { units, detected } = parseUnitsFromName(productName);
+
+          // Determine unit type based on category
+          let unitName = 'each';
+          let packageName = 'each';
+          if (category === 'beverage') {
+            unitName = 'can';
+            packageName = detected && units > 1 ? 'pack' : 'can';
+          } else if (fullName.includes('cup') || fullName.includes('hummus')) {
+            unitName = 'cup';
+            packageName = detected && units > 1 ? 'pack' : 'cup';
+          }
+
           const lookupResult: LookupResult = {
             found: false,
             source: 'openfoodfacts',
@@ -185,6 +239,9 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
               category,
               image_url: p.image_front_small_url || p.image_url || null,
               default_price: null,
+              units_per_package: units,
+              unit_name: unitName,
+              package_name: packageName,
             },
           };
 
@@ -195,6 +252,9 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
             category,
             image_url: lookupResult.product.image_url || '',
             default_price: '',
+            units_per_package: units.toString(),
+            unit_name: unitName,
+            package_name: packageName,
           });
           setBrandFilter(similar && useExistingBrand ? similar.name : apiBrand);
           setLoading(false);
@@ -215,10 +275,13 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
           category: 'snack',
           image_url: null,
           default_price: null,
+          units_per_package: 1,
+          unit_name: 'each',
+          package_name: 'each',
         },
       };
       setResult(lookupResult);
-      setFormData({ brand: '', name: '', category: 'snack', image_url: '', default_price: '' });
+      setFormData({ brand: '', name: '', category: 'snack', image_url: '', default_price: '', units_per_package: '1', unit_name: 'each', package_name: 'each' });
       setBrandFilter('');
     } catch (err) {
       console.error('Lookup error:', err);
@@ -265,6 +328,9 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
         category: formData.category,
         image_url: formData.image_url.trim() || null,
         default_price: formData.default_price ? parseFloat(formData.default_price) : null,
+        units_per_package: parseInt(formData.units_per_package) || 1,
+        unit_name: formData.unit_name,
+        package_name: formData.package_name,
       };
 
       const saveRes = await adminFetch('/api/admin/crud', {
@@ -321,6 +387,10 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
 
   // Product exists in database - just show confirmation
   if (result.found && result.existingProduct) {
+    const units = result.existingProduct.units_per_package || 1;
+    const unitName = result.existingProduct.unit_name || 'each';
+    const packageName = result.existingProduct.package_name || 'each';
+
     return (
       <div style={{ padding: '16px', background: '#f0fdf4', borderRadius: '12px', border: '2px solid #22c55e' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#16a34a' }}>
@@ -339,6 +409,11 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
             )}
             <div style={{ fontWeight: 600, fontSize: '16px' }}>{result.product.name}</div>
             <div style={{ fontSize: '13px', color: '#6b7280' }}>{result.product.barcode}</div>
+            {units > 1 && (
+              <div style={{ fontSize: '12px', color: '#6366f1', marginTop: '4px' }}>
+                📦 1 {packageName} = {units} {units === 1 ? unitName : unitName + 's'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -510,6 +585,52 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
               {cat}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Package/Unit Section */}
+      <div style={{ padding: '12px', background: '#f0f9ff', borderRadius: '8px', marginBottom: '14px', border: '1px solid #0ea5e9' }}>
+        <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px', color: '#0369a1' }}>
+          📦 Package Size
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ flex: 1 }}>
+            <select
+              className={styles.formSelect}
+              value={formData.package_name}
+              onChange={(e) => setFormData(f => ({ ...f, package_name: e.target.value }))}
+              style={{ fontSize: '13px', padding: '8px' }}
+            >
+              {PACKAGE_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ width: '60px' }}>
+            <input
+              type="number"
+              min="1"
+              value={formData.units_per_package}
+              onChange={(e) => setFormData(f => ({ ...f, units_per_package: e.target.value }))}
+              className={styles.formInput}
+              style={{ fontSize: '13px', padding: '8px', textAlign: 'center' }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <select
+              className={styles.formSelect}
+              value={formData.unit_name}
+              onChange={(e) => setFormData(f => ({ ...f, unit_name: e.target.value }))}
+              style={{ fontSize: '13px', padding: '8px' }}
+            >
+              {UNIT_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div style={{ fontSize: '12px', color: '#0369a1', background: '#e0f2fe', padding: '6px 10px', borderRadius: '4px' }}>
+          1 {formData.package_name} = {formData.units_per_package} {parseInt(formData.units_per_package) === 1 ? formData.unit_name : formData.unit_name + 's'}
         </div>
       </div>
 

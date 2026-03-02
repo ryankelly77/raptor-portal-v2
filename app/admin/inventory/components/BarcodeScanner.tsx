@@ -446,18 +446,26 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     background: '#000',
     borderRadius: '12px',
     overflow: 'hidden',
+    // Fill available viewport height minus some padding for header
+    minHeight: 'calc(100vh - 280px)',
+    maxHeight: 'calc(100vh - 200px)',
+    display: 'flex',
+    flexDirection: 'column',
   };
 
   return (
     <div style={containerStyle}>
       {/* Camera View */}
-      <div style={{ flex: 1, position: 'relative', minHeight: fullScreen ? 0 : '300px' }}>
+      <div style={{ flex: 1, position: 'relative', minHeight: fullScreen ? 0 : '350px', overflow: 'hidden' }}>
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
           style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
             width: '100%',
             height: '100%',
             objectFit: 'cover',
@@ -530,32 +538,33 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'rgba(34, 197, 94, 0.5)',
+            background: 'rgba(34, 197, 94, 0.7)',
             pointerEvents: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            animation: 'fadeIn 0.1s ease-out',
+            zIndex: 100,
           }}>
             <div style={{
-              background: 'rgba(0, 0, 0, 0.9)',
+              background: 'rgba(0, 0, 0, 0.95)',
               color: '#22c55e',
-              padding: '24px 48px',
-              borderRadius: '16px',
+              padding: '32px 56px',
+              borderRadius: '20px',
               fontWeight: 700,
-              fontSize: '24px',
+              fontSize: '28px',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+              gap: '12px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+              border: '4px solid #22c55e',
             }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               <span>SCANNED!</span>
               {lastScannedDisplay && (
-                <span style={{ fontSize: '14px', color: '#9ca3af', fontFamily: 'monospace' }}>
+                <span style={{ fontSize: '16px', color: '#9ca3af', fontFamily: 'monospace' }}>
                   {lastScannedDisplay}
                 </span>
               )}

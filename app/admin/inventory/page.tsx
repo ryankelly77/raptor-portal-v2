@@ -7,13 +7,17 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR01-P';
+const BUILD_VERSION = 'v2024-MAR01-Q';
 
 interface Product {
   id: string;
   name: string;
   barcode: string;
   category: string;
+  // Package quantities
+  units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
 }
 
 interface Movement {
@@ -84,27 +88,35 @@ export default function InventoryPage() {
 
       setRecentMovements(movementsWithProducts.slice(0, 20));
 
-      // Calculate stats
+      // Calculate stats (in individual units, not packages)
       let onHand = 0;
       let available = 0;
 
       for (const m of movementsList) {
+        // Get units per package for this product (default to 1 if not set)
+        const product = productsMap.get(m.product_id);
+        const unitsPerPkg = product?.units_per_package || 1;
+
         switch (m.movement_type) {
           case 'purchase_in':
-            onHand += m.quantity;
+            // Purchases are in packages, convert to units
+            onHand += m.quantity * unitsPerPkg;
             break;
           case 'restock_out':
-            onHand -= m.quantity;
+            // Restocking to machine (packages)
+            onHand -= m.quantity * unitsPerPkg;
             break;
           case 'restock_in':
-            available += m.quantity;
+            // Loaded into machine (packages become available as units)
+            available += m.quantity * unitsPerPkg;
             break;
           case 'sold':
           case 'shrinkage':
+            // Sales/shrinkage are individual units
             available -= m.quantity;
             break;
           case 'adjustment':
-            // Adjustments can be positive or negative, quantity already has sign
+            // Adjustments are in individual units
             onHand += m.quantity;
             break;
         }
@@ -208,11 +220,11 @@ export default function InventoryPage() {
             <div className={styles.summaryValue}>{stats.totalProducts}</div>
           </div>
           <div className={styles.summaryCard}>
-            <div className={styles.summaryLabel}>On-Hand Qty</div>
+            <div className={styles.summaryLabel}>On-Hand (units)</div>
             <div className={`${styles.summaryValue} ${styles.orange}`}>{stats.onHandQty}</div>
           </div>
           <div className={styles.summaryCard}>
-            <div className={styles.summaryLabel}>In Machines</div>
+            <div className={styles.summaryLabel}>In Machines (units)</div>
             <div className={styles.summaryValue}>{stats.availableQty}</div>
           </div>
           <div className={styles.summaryCard}>

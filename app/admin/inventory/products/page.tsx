@@ -16,7 +16,13 @@ interface Product {
   image_url: string | null;
   is_active: boolean;
   created_at: string;
+  units_per_package: number;
+  unit_name: string;
+  package_name: string;
 }
+
+const PACKAGE_OPTIONS = ['each', 'pack', 'case', 'box', 'bag', 'carton', 'tray'];
+const UNIT_OPTIONS = ['each', 'can', 'bottle', 'cup', 'bag', 'bar', 'piece'];
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -34,6 +40,9 @@ export default function ProductsPage() {
     category: 'snack' as 'snack' | 'beverage' | 'meal',
     default_price: '',
     image_url: '',
+    units_per_package: '1',
+    unit_name: 'each',
+    package_name: 'each',
   });
   const [saving, setSaving] = useState(false);
 
@@ -107,6 +116,9 @@ export default function ProductsPage() {
       category: 'snack',
       default_price: '',
       image_url: '',
+      units_per_package: '1',
+      unit_name: 'each',
+      package_name: 'each',
     });
     setShowModal(true);
   }
@@ -120,6 +132,9 @@ export default function ProductsPage() {
       category: product.category,
       default_price: product.default_price?.toString() || '',
       image_url: product.image_url || '',
+      units_per_package: (product.units_per_package || 1).toString(),
+      unit_name: product.unit_name || 'each',
+      package_name: product.package_name || 'each',
     });
     setShowModal(true);
   }
@@ -139,6 +154,9 @@ export default function ProductsPage() {
         category: formData.category,
         default_price: formData.default_price ? parseFloat(formData.default_price) : null,
         image_url: formData.image_url.trim() || null,
+        units_per_package: parseInt(formData.units_per_package) || 1,
+        unit_name: formData.unit_name,
+        package_name: formData.package_name,
       };
 
       if (editingProduct) {
@@ -191,6 +209,18 @@ export default function ProductsPage() {
         alert('Error deleting product');
       }
     }
+  }
+
+  // Format package/unit display
+  function formatPackageUnit(product: Product): string {
+    const units = product.units_per_package || 1;
+    const unitName = product.unit_name || 'each';
+    const packageName = product.package_name || 'each';
+
+    if (units === 1 && packageName === unitName) {
+      return unitName;
+    }
+    return `1 ${packageName} = ${units} ${units === 1 ? unitName : unitName + 's'}`;
   }
 
   if (loading) {
@@ -306,6 +336,12 @@ export default function ProductsPage() {
                   )}
                   <div className={styles.productName}>{product.name}</div>
                   <div className={styles.productBarcode}>{product.barcode}</div>
+                  {/* Package info */}
+                  {(product.units_per_package > 1 || product.unit_name !== 'each') && (
+                    <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '4px' }}>
+                      📦 {formatPackageUnit(product)}
+                    </div>
+                  )}
                   <div className={styles.productDetails}>
                     <span className={`${styles.categoryBadge} ${styles[product.category]}`}>
                       {product.category}
@@ -383,6 +419,56 @@ export default function ProductsPage() {
                     <option value="meal">Meal</option>
                   </select>
                 </div>
+
+                {/* Package/Unit Section */}
+                <div style={{ padding: '12px', background: '#f0f9ff', borderRadius: '8px', marginBottom: '16px', border: '1px solid #0ea5e9' }}>
+                  <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '12px', color: '#0369a1' }}>
+                    📦 Package Size
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ flex: 1 }}>
+                      <label className={styles.formLabel}>Package Type</label>
+                      <select
+                        className={styles.formSelect}
+                        value={formData.package_name}
+                        onChange={(e) => setFormData({ ...formData, package_name: e.target.value })}
+                      >
+                        {PACKAGE_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ width: '80px' }}>
+                      <label className={styles.formLabel}>Units</label>
+                      <input
+                        type="number"
+                        min="1"
+                        className={styles.formInput}
+                        value={formData.units_per_package}
+                        onChange={(e) => setFormData({ ...formData, units_per_package: e.target.value })}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className={styles.formLabel}>Unit Type</label>
+                      <select
+                        className={styles.formSelect}
+                        value={formData.unit_name}
+                        onChange={(e) => setFormData({ ...formData, unit_name: e.target.value })}
+                      >
+                        {UNIT_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Preview */}
+                  <div style={{ fontSize: '13px', color: '#0369a1', background: '#e0f2fe', padding: '8px 12px', borderRadius: '6px' }}>
+                    Preview: <strong>1 {formData.package_name} = {formData.units_per_package} {parseInt(formData.units_per_package) === 1 ? formData.unit_name : formData.unit_name + 's'}</strong>
+                  </div>
+                </div>
+
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Default Price</label>
                   <input

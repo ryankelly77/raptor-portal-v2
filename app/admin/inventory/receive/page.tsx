@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-P';
+const BUILD_VERSION = 'v2024-MAR01-Q';
 
 interface ErrorInfo {
   message: string;
@@ -30,6 +30,10 @@ interface ScannedItem {
   matchConfidence?: 'alias' | 'ai-high' | 'ai-medium' | 'ai-low' | 'none';
   matchedOcrLine?: string;
   aiReasoning?: string;
+  // Package quantities
+  units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
 }
 
 // AI-parsed receipt item (from Vision API)
@@ -65,6 +69,10 @@ interface Product {
   brand: string | null;
   barcode: string;
   category: string;
+  // Package quantities
+  units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
 }
 
 // Category options for new products
@@ -209,6 +217,10 @@ export default function ReceiveItemsPage() {
       isNew: !result.found,
       image_url: result.product.image_url,
       matchConfidence: 'none',
+      // Package info from product
+      units_per_package: result.product.units_per_package || 1,
+      unit_name: result.product.unit_name || 'each',
+      package_name: result.product.package_name || 'each',
     };
     setItems([...items, newItem]);
     setCurrentBarcode(null);
@@ -480,7 +492,7 @@ export default function ReceiveItemsPage() {
           : i
       ));
     } else {
-      // Add new item
+      // Add new item with package info
       const newItem: ScannedItem = {
         barcode: newProduct.barcode,
         name: newProduct.name,
@@ -492,6 +504,10 @@ export default function ReceiveItemsPage() {
         isNew: false,
         matchConfidence: 'ai-high',
         matchedOcrLine: aiItem.receipt_text,
+        // Package info
+        units_per_package: newProduct.units_per_package || 1,
+        unit_name: newProduct.unit_name || 'each',
+        package_name: newProduct.package_name || 'each',
       };
       setItems(prev => [...prev, newItem]);
     }
@@ -625,13 +641,17 @@ export default function ReceiveItemsPage() {
   };
 
   const totalItemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+  const totalUnitCount = items.reduce((sum, i) => {
+    const unitsPerPkg = i.units_per_package || 1;
+    return sum + (i.quantity * unitsPerPkg);
+  }, 0);
 
   return (
     <AdminShell title="Receive Items">
       <div className={styles.inventoryPage}>
         {/* Build version */}
         <div style={{ background: '#dbeafe', color: '#1e40af', padding: '6px 12px', borderRadius: '6px', marginBottom: '12px', fontSize: '11px', fontFamily: 'monospace' }}>
-          {BUILD_VERSION} | Step: {step} | Items: {totalItemCount}
+          {BUILD_VERSION} | Step: {step} | Pkgs: {totalItemCount}{totalUnitCount !== totalItemCount ? ` (${totalUnitCount} units)` : ''}
         </div>
 
         {/* Toast notification */}
@@ -678,25 +698,43 @@ export default function ReceiveItemsPage() {
             {items.length > 0 && (
               <div style={{ marginTop: '20px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Scanned Items ({totalItemCount})</h3>
-                {items.map((item) => (
-                  <div key={item.barcode} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: item.isNew ? '#fefce8' : '#f9fafb', borderRadius: '10px', marginBottom: '8px', border: item.isNew ? '1px solid #facc15' : '1px solid #e5e7eb' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
-                      <div style={{ fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>{item.barcode}</div>
+                {items.map((item) => {
+                  const hasPackageInfo = item.units_per_package && item.units_per_package > 1;
+                  const totalUnits = hasPackageInfo ? item.quantity * (item.units_per_package || 1) : item.quantity;
+                  return (
+                    <div key={item.barcode} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: item.isNew ? '#fefce8' : '#f9fafb', borderRadius: '10px', marginBottom: '8px', border: item.isNew ? '1px solid #facc15' : '1px solid #e5e7eb' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
+                        <div style={{ fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                          {item.barcode}
+                          {hasPackageInfo && (
+                            <span style={{ marginLeft: '8px', color: '#2563eb' }}>
+                              (1 {item.package_name} = {item.units_per_package} {item.unit_name}s)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button onClick={() => updateQuantity(item.barcode, -1)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '18px' }}>-</button>
+                          <span style={{ fontWeight: 600, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
+                          <button onClick={() => updateQuantity(item.barcode, 1)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '18px' }}>+</button>
+                        </div>
+                        {hasPackageInfo && (
+                          <div style={{ fontSize: '11px', color: '#2563eb', fontWeight: 500 }}>
+                            = {totalUnits} {item.unit_name}s
+                          </div>
+                        )}
+                      </div>
+                      <button onClick={() => removeItem(item.barcode)} style={{ color: '#dc2626', background: 'none', border: 'none', padding: '8px', cursor: 'pointer' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button onClick={() => updateQuantity(item.barcode, -1)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '18px' }}>-</button>
-                      <span style={{ fontWeight: 600, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.barcode, 1)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '18px' }}>+</button>
-                    </div>
-                    <button onClick={() => removeItem(item.barcode)} style={{ color: '#dc2626', background: 'none', border: 'none', padding: '8px', cursor: 'pointer' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
                 <button onClick={() => setStep('receipt')} style={{ width: '100%', marginTop: '16px', padding: '16px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '16px', cursor: 'pointer' }}>
-                  Continue to Receipt ({totalItemCount} items)
+                  Continue to Receipt ({totalItemCount} pkg{totalItemCount !== 1 ? 's' : ''}{totalUnitCount !== totalItemCount ? ` / ${totalUnitCount} units` : ''})
                 </button>
               </div>
             )}
@@ -905,7 +943,7 @@ export default function ReceiveItemsPage() {
                                         : i
                                     ));
                                   } else if (product) {
-                                    // Add to items
+                                    // Add to items with package info from product
                                     const newItem: ScannedItem = {
                                       barcode: product.barcode,
                                       name: product.name,
@@ -917,6 +955,10 @@ export default function ReceiveItemsPage() {
                                       isNew: false,
                                       matchConfidence: `ai-${aiItem.confidence}` as const,
                                       matchedOcrLine: aiItem.receipt_text,
+                                      // Package info
+                                      units_per_package: product.units_per_package || 1,
+                                      unit_name: product.unit_name || 'each',
+                                      package_name: product.package_name || 'each',
                                     };
                                     setItems(prev => [...prev, newItem]);
                                   }
@@ -1279,24 +1321,34 @@ export default function ReceiveItemsPage() {
               <div><strong>Store:</strong> {storeName}{storeNumber ? ` ${storeNumber}` : ''}</div>
               <div><strong>Date:</strong> {purchaseDate}</div>
               <div><strong>By:</strong> {purchasedBy}</div>
-              <div><strong>Items:</strong> {totalItemCount}</div>
+              <div><strong>Packages:</strong> {totalItemCount}{totalUnitCount !== totalItemCount ? ` (${totalUnitCount} individual units)` : ''}</div>
               <div><strong>Total:</strong> ${(receiptTotalNum || calculatedTotal).toFixed(2)}</div>
             </div>
 
             {/* Items List */}
             <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Items</h3>
-            {items.map((item) => (
-              <div key={item.barcode} style={{ padding: '12px', background: '#f9fafb', borderRadius: '10px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
-                  <div style={{ fontWeight: 600 }}>{item.name}</div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
+            {items.map((item) => {
+              const hasPackageInfo = item.units_per_package && item.units_per_package > 1;
+              const totalUnits = hasPackageInfo ? item.quantity * (item.units_per_package || 1) : item.quantity;
+              return (
+                <div key={item.barcode} style={{ padding: '12px', background: '#f9fafb', borderRadius: '10px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
+                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                      {hasPackageInfo ? (
+                        <span>{item.quantity} {item.package_name}{item.quantity > 1 ? 's' : ''} = <strong style={{ color: '#2563eb' }}>{totalUnits} {item.unit_name}s</strong></span>
+                      ) : (
+                        <span>Qty: {item.quantity}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: '16px' }}>
+                    {item.unitCost ? `$${parseFloat(item.unitCost).toFixed(2)}` : '—'}
+                  </div>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>
-                  {item.unitCost ? `$${parseFloat(item.unitCost).toFixed(2)}` : '—'}
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* Navigation */}
             <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
