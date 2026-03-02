@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-J';
+const BUILD_VERSION = 'v2024-MAR02-K';
 
 interface ErrorInfo {
   message: string;
@@ -619,13 +619,13 @@ export default function ReceiveItemsPage() {
       }
 
       const purchaseId = purchaseData.data.id;
-      alert(`Step 1: Purchase created (${purchaseId}). Processing ${items.length} items...`);
+      alert(`Step 1: Purchase created with ID: ${purchaseId}`);
 
       // 2. Process each item
       let itemsProcessed = 0;
+      let createdMovementIds: string[] = [];
       for (const item of items) {
         let productId = item.productId;
-        alert(`Processing item ${itemsProcessed + 1}: ${item.name}, productId=${productId || 'NEW'}`);
 
         // Create new product if needed
         if (!productId) {
@@ -705,18 +705,18 @@ export default function ReceiveItemsPage() {
           }),
         });
 
+        const movementData = await movementRes.json();
         if (!movementRes.ok) {
-          const errData = await movementRes.json();
-          console.error('[Receive] Failed to create movement:', errData);
-          throw new Error(`Failed to create movement: ${errData.error || 'Unknown error'}`);
+          alert(`Movement FAILED for ${item.name}: ${movementData.error || 'Unknown error'}`);
+          throw new Error(`Failed to create movement: ${movementData.error || 'Unknown error'}`);
         } else {
-          const movementData = await movementRes.json();
+          createdMovementIds.push(movementData.data?.id || 'no-id');
           console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', packageQty, 'pkgs (', totalUnits, 'units)', 'exp:', item.expirationDate);
         }
         itemsProcessed++;
       }
 
-      alert(`Purchase saved! ${itemsProcessed} items processed.`);
+      alert(`SUCCESS!\n\nPurchase ID: ${purchaseId}\nItems: ${itemsProcessed}\nMovement IDs: ${createdMovementIds.join(', ')}\n\nCheck DB for these IDs.`);
       router.push('/admin/inventory');
 
     } catch (err: unknown) {
