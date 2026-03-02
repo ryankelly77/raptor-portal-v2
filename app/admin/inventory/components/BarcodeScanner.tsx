@@ -33,12 +33,13 @@ const BARCODE_FORMATS = [
   'itf', 'codabar', 'data_matrix', 'qr_code'
 ];
 
-// Scanner settings - MORE AGGRESSIVE blocking
-const SCAN_INTERVAL_MS = 150; // ~7fps - slower scanning
+// Scanner settings
+const SCAN_INTERVAL_MS = 150; // ~7fps
 const COOLDOWN_MS = 2000; // 2 second cooldown after successful scan
-const CONSECUTIVE_FRAMES_REQUIRED = 4; // Same barcode must appear 4 times in a row
+const CONSECUTIVE_FRAMES_REQUIRED = 3; // Reduced for harder barcodes
 const SUCCESS_OVERLAY_MS = 1500; // Green overlay duration
 const SAME_BARCODE_BLOCK_MS = 10000; // Block same barcode for 10 seconds
+const FALLBACK_SHOW_DELAY_MS = 6000; // Show fallback options after 6 seconds
 
 export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeScannerProps) {
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'cooldown' | 'error'>('initializing');
@@ -48,21 +49,53 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   const [showFlash, setShowFlash] = useState(false);
   const [cameraHint, setCameraHint] = useState<string | null>(null);
   const [lastScannedDisplay, setLastScannedDisplay] = useState<string | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
+  const [photoProcessing, setPhotoProcessing] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const processCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetector | null>(null);
   const scanningRef = useRef<boolean>(false);
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const zxingReaderRef = useRef<any>(null);
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // ALL blocking logic uses refs for synchronous access
   const lastScanTimeRef = useRef<number>(0);
   const lastScannedBarcodeRef = useRef<string>('');
   const isProcessingRef = useRef<boolean>(false);
   const consecutiveDetectionsRef = useRef<{ barcode: string; count: number }>({ barcode: '', count: 0 });
+  const scanStartTimeRef = useRef<number>(Date.now());
+
+  // Apply contrast enhancement to canvas for difficult barcodes
+  const enhanceContrast = useCallback((canvas: HTMLCanvasElement): void => {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Convert to high-contrast grayscale
+    for (let i = 0; i < data.length; i += 4) {
+      // Grayscale using luminance formula
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+      // Apply threshold to create high-contrast black/white
+      const bw = gray < 140 ? 0 : 255;
+
+      data[i] = bw;     // R
+      data[i + 1] = bw; // G
+      data[i + 2] = bw; // B
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+  }, []);
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -73,6 +106,11 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     if (initTimeoutRef.current) {
       clearTimeout(initTimeoutRef.current);
       initTimeoutRef.current = null;
+    }
+
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+      fallbackTimeoutRef.current = null;
     }
 
     if (scanIntervalRef.current) {
@@ -98,7 +136,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     }
   }, []);
 
-  // Handle successful scan with AGGRESSIVE debouncing
+  // Handle successful scan with debouncing
   const handleDetection = useCallback((barcode: string) => {
     const now = Date.now();
 
@@ -114,7 +152,6 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
 
     // BLOCK 3: Same barcode block - prevent re-scanning the same item
     if (barcode === lastScannedBarcodeRef.current && now - lastScanTimeRef.current < SAME_BARCODE_BLOCK_MS) {
-      // Reset consecutive count if they're still pointing at the same barcode
       consecutiveDetectionsRef.current = { barcode: '', count: 0 };
       return;
     }
@@ -123,9 +160,8 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     if (consecutiveDetectionsRef.current.barcode === barcode) {
       consecutiveDetectionsRef.current.count++;
     } else {
-      // Different barcode detected - reset counter
       consecutiveDetectionsRef.current = { barcode, count: 1 };
-      return; // First detection doesn't count
+      return;
     }
 
     // Not enough consecutive detections yet
@@ -141,6 +177,13 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     lastScanTimeRef.current = now;
     lastScannedBarcodeRef.current = barcode;
     consecutiveDetectionsRef.current = { barcode: '', count: 0 };
+
+    // Hide fallback options on successful scan
+    setShowFallback(false);
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+      fallbackTimeoutRef.current = null;
+    }
 
     // Update UI
     setStatus('cooldown');
@@ -176,55 +219,202 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
       setShowFlash(false);
       setStatus('scanning');
       isProcessingRef.current = false;
+      // Reset fallback timer
+      scanStartTimeRef.current = Date.now();
+      fallbackTimeoutRef.current = setTimeout(() => setShowFallback(true), FALLBACK_SHOW_DELAY_MS);
     }, SUCCESS_OVERLAY_MS);
   }, [onScan]);
 
-  // Native BarcodeDetector scanning loop
+  // Toggle flashlight/torch
+  const toggleTorch = useCallback(async () => {
+    if (!streamRef.current) return;
+
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
+    try {
+      const capabilities = track.getCapabilities() as any;
+      if (capabilities.torch) {
+        await track.applyConstraints({ advanced: [{ torch: !torchOn } as any] });
+        setTorchOn(!torchOn);
+        console.log('[Scanner] Torch:', !torchOn ? 'ON' : 'OFF');
+      }
+    } catch (e) {
+      console.error('[Scanner] Torch error:', e);
+    }
+  }, [torchOn]);
+
+  // Read barcode from photo file
+  const handlePhotoCapture = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !zxingReaderRef.current) return;
+
+    setPhotoProcessing(true);
+    console.log('[Scanner] Processing photo...');
+
+    try {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      // Create canvas for processing
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Cannot get canvas context');
+
+      // Helper to decode from image element
+      const decodePhoto = async (): Promise<string | null> => {
+        try {
+          const result = await zxingReaderRef.current.decodeFromImageElement(img);
+          return result ? result.getText() : null;
+        } catch {
+          return null;
+        }
+      };
+
+      // Try raw image first
+      let rawResult = await decodePhoto();
+      if (rawResult) {
+        console.log('[Scanner] Photo decode success (raw):', rawResult);
+        isProcessingRef.current = true;
+        lastScanTimeRef.current = Date.now();
+        lastScannedBarcodeRef.current = rawResult;
+        setStatus('cooldown');
+        setShowFlash(true);
+        setLastScannedDisplay(rawResult);
+        onScan(rawResult);
+        setTimeout(() => {
+          setShowFlash(false);
+          setStatus('scanning');
+          isProcessingRef.current = false;
+        }, SUCCESS_OVERLAY_MS);
+        URL.revokeObjectURL(img.src);
+        setPhotoProcessing(false);
+        return;
+      }
+
+      console.log('[Scanner] Raw photo decode failed, trying enhanced...');
+
+      // Try with contrast enhancement - draw to canvas, enhance, convert back to image
+      ctx.drawImage(img, 0, 0);
+      enhanceContrast(canvas);
+
+      // Convert enhanced canvas to image
+      const enhancedBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      if (enhancedBlob) {
+        const enhancedUrl = URL.createObjectURL(enhancedBlob);
+        const enhancedImg = new Image();
+        enhancedImg.src = enhancedUrl;
+        await new Promise((resolve) => { enhancedImg.onload = resolve; });
+
+        try {
+          const result = await zxingReaderRef.current.decodeFromImageElement(enhancedImg);
+          if (result) {
+            console.log('[Scanner] Photo decode success (enhanced):', result.getText());
+            isProcessingRef.current = true;
+            lastScanTimeRef.current = Date.now();
+            lastScannedBarcodeRef.current = result.getText();
+            setStatus('cooldown');
+            setShowFlash(true);
+            setLastScannedDisplay(result.getText());
+            onScan(result.getText());
+            setTimeout(() => {
+              setShowFlash(false);
+              setStatus('scanning');
+              isProcessingRef.current = false;
+            }, SUCCESS_OVERLAY_MS);
+            URL.revokeObjectURL(enhancedUrl);
+            URL.revokeObjectURL(img.src);
+            setPhotoProcessing(false);
+            return;
+          }
+        } catch (e) {
+          console.log('[Scanner] Enhanced photo decode failed');
+        }
+        URL.revokeObjectURL(enhancedUrl);
+      }
+
+      // Both failed
+      alert('Could not read barcode from photo. Try taking a clearer picture or enter the barcode manually.');
+      URL.revokeObjectURL(img.src);
+    } catch (err) {
+      console.error('[Scanner] Photo processing error:', err);
+      alert('Error processing photo. Please try again.');
+    } finally {
+      setPhotoProcessing(false);
+      // Reset file input
+      if (photoInputRef.current) {
+        photoInputRef.current.value = '';
+      }
+    }
+  }, [enhanceContrast, handleDetection, onScan]);
+
+  // Native BarcodeDetector scanning loop with dual detection
   const startNativeScanning = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || !detectorRef.current) {
+    if (!videoRef.current || !canvasRef.current || !processCanvasRef.current || !detectorRef.current) {
       console.log('[Scanner] Cannot start native scanning - missing refs');
       return;
     }
 
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
+    const rawCanvas = canvasRef.current;
+    const processCanvas = processCanvasRef.current;
+    const rawCtx = rawCanvas.getContext('2d', { willReadFrequently: true });
+    const processCtx = processCanvas.getContext('2d', { willReadFrequently: true });
+    if (!rawCtx || !processCtx) return;
 
     scanningRef.current = true;
-    console.log('[Scanner] Starting native scanning loop at', Math.round(1000 / SCAN_INTERVAL_MS), 'fps');
+    console.log('[Scanner] Starting native scanning loop with dual detection');
 
-    // Use setInterval for controlled rate
     scanIntervalRef.current = setInterval(async () => {
-      // Check if we should be scanning
-      if (!scanningRef.current || isProcessingRef.current) {
-        return;
+      if (!scanningRef.current || isProcessingRef.current) return;
+      if (!video.videoWidth || !video.videoHeight) return;
+
+      // Set canvas dimensions
+      rawCanvas.width = video.videoWidth;
+      rawCanvas.height = video.videoHeight;
+      processCanvas.width = video.videoWidth;
+      processCanvas.height = video.videoHeight;
+
+      // Draw raw frame
+      rawCtx.drawImage(video, 0, 0);
+
+      // Try 1: Raw detection (fast, works for good barcodes)
+      try {
+        const barcodes = await detectorRef.current!.detect(rawCanvas);
+        if (barcodes.length > 0 && scanningRef.current) {
+          handleDetection(barcodes[0].rawValue);
+          return;
+        }
+      } catch (e) {
+        // Continue to enhanced
       }
 
-      // Wait for video to have dimensions
-      if (!video.videoWidth || !video.videoHeight) {
-        return;
-      }
-
-      // Set canvas to video dimensions
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
+      // Try 2: Enhanced detection (slower, works for difficult barcodes)
+      processCtx.drawImage(video, 0, 0);
+      enhanceContrast(processCanvas);
 
       try {
-        const barcodes = await detectorRef.current!.detect(canvas);
+        const barcodes = await detectorRef.current!.detect(processCanvas);
         if (barcodes.length > 0 && scanningRef.current) {
+          console.log('[Scanner] Detected via enhanced processing');
           handleDetection(barcodes[0].rawValue);
         }
       } catch (e) {
         // Detection error - continue scanning
       }
     }, SCAN_INTERVAL_MS);
-  }, [handleDetection]);
+  }, [handleDetection, enhanceContrast]);
 
   // Initialize scanner
   useEffect(() => {
     let mounted = true;
+    scanStartTimeRef.current = Date.now();
 
     const init = async () => {
       const hasBarcodeDetector = 'BarcodeDetector' in window;
@@ -242,6 +432,11 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           setCameraHint('Camera not loading? Try refreshing the page or use manual entry below.');
         }
       }, 3000);
+
+      // Start fallback timer
+      fallbackTimeoutRef.current = setTimeout(() => {
+        if (mounted) setShowFallback(true);
+      }, FALLBACK_SHOW_DELAY_MS);
 
       // Try Native BarcodeDetector first
       if (hasBarcodeDetector) {
@@ -272,6 +467,16 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
 
             console.log('[Scanner] Got stream:', stream.active, 'tracks:', stream.getTracks().length);
             streamRef.current = stream;
+
+            // Check for torch capability
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+              const capabilities = track.getCapabilities() as any;
+              if (capabilities.torch) {
+                setTorchAvailable(true);
+                console.log('[Scanner] Torch available');
+              }
+            }
 
             const video = videoRef.current;
             if (video) {
@@ -327,13 +532,14 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
         }
       }
 
-      // Fallback to ZXing
-      console.log('[Scanner] Falling back to ZXing');
+      // Fallback to ZXing with enhanced settings
+      console.log('[Scanner] Falling back to ZXing with enhanced settings');
       try {
         const { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } = await import('@zxing/library');
 
         if (!mounted) return;
 
+        // Enhanced hints for difficult barcodes
         const hints = new Map();
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [
           BarcodeFormat.EAN_13,
@@ -346,8 +552,11 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           BarcodeFormat.CODABAR,
         ]);
         hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.CHARACTER_SET, 'UTF-8');
+        // Note: ALSO_INVERTED not available in this version, using contrast enhancement instead
 
         const reader = new BrowserMultiFormatReader(hints);
+        zxingReaderRef.current = reader;
         setScannerType('zxing');
 
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -355,7 +564,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
         const video = videoRef.current;
         if (!video || !mounted) return;
 
-        console.log('[Scanner] Starting ZXing with high resolution...');
+        console.log('[Scanner] Starting ZXing with enhanced detection...');
 
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
@@ -370,23 +579,120 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           }
         }
 
-        zxingReaderRef.current = reader;
+        // Use custom scanning with dual detection
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: deviceId ? { exact: deviceId } : undefined,
+            facingMode: deviceId ? undefined : 'environment',
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 }
+          },
+          audio: false
+        });
 
-        // Throttle ZXing callbacks
-        let lastZxingTime = 0;
-        await reader.decodeFromVideoDevice(
-          deviceId,
-          video,
-          (result) => {
-            if (result) {
-              const now = Date.now();
-              if (now - lastZxingTime >= SCAN_INTERVAL_MS) {
-                lastZxingTime = now;
-                handleDetection(result.getText());
-              }
-            }
+        if (!mounted) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+
+        // Check for torch capability
+        const track = stream.getVideoTracks()[0];
+        if (track) {
+          const capabilities = track.getCapabilities() as any;
+          if (capabilities.torch) {
+            setTorchAvailable(true);
+            console.log('[Scanner] Torch available');
           }
-        );
+        }
+
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('autoplay', 'true');
+        video.setAttribute('muted', 'true');
+
+        await new Promise<void>((resolve) => {
+          video.onloadedmetadata = async () => {
+            try {
+              await video.play();
+              resolve();
+            } catch (e) {
+              console.error('[Scanner] Video play error:', e);
+              resolve();
+            }
+          };
+        });
+
+        // Start custom scanning loop with dual detection using luminance source
+        const rawCanvas = canvasRef.current;
+        const processCanvas = processCanvasRef.current;
+        if (!rawCanvas || !processCanvas) return;
+
+        scanningRef.current = true;
+
+        // Helper to decode from canvas using HTMLCanvasElementLuminanceSource
+        const decodeFromCanvasElement = async (canvas: HTMLCanvasElement) => {
+          // Convert canvas to image element for decoding
+          return new Promise<string | null>((resolve) => {
+            canvas.toBlob(async (blob) => {
+              if (!blob) { resolve(null); return; }
+              const url = URL.createObjectURL(blob);
+              const img = new Image();
+              img.onload = async () => {
+                try {
+                  const result = await reader.decodeFromImageElement(img);
+                  URL.revokeObjectURL(url);
+                  resolve(result ? result.getText() : null);
+                } catch {
+                  URL.revokeObjectURL(url);
+                  resolve(null);
+                }
+              };
+              img.onerror = () => {
+                URL.revokeObjectURL(url);
+                resolve(null);
+              };
+              img.src = url;
+            }, 'image/jpeg', 0.9);
+          });
+        };
+
+        scanIntervalRef.current = setInterval(async () => {
+          if (!scanningRef.current || isProcessingRef.current) return;
+          if (!video.videoWidth || !video.videoHeight) return;
+
+          rawCanvas.width = video.videoWidth;
+          rawCanvas.height = video.videoHeight;
+
+          const rawCtx = rawCanvas.getContext('2d', { willReadFrequently: true });
+          if (!rawCtx) return;
+
+          // Draw raw frame
+          rawCtx.drawImage(video, 0, 0);
+
+          // Try 1: Raw detection
+          const rawResult = await decodeFromCanvasElement(rawCanvas);
+          if (rawResult && scanningRef.current) {
+            handleDetection(rawResult);
+            return;
+          }
+
+          // Try 2: Enhanced detection with contrast
+          processCanvas.width = video.videoWidth;
+          processCanvas.height = video.videoHeight;
+          const processCtx = processCanvas.getContext('2d', { willReadFrequently: true });
+          if (!processCtx) return;
+
+          processCtx.drawImage(video, 0, 0);
+          enhanceContrast(processCanvas);
+
+          const enhancedResult = await decodeFromCanvasElement(processCanvas);
+          if (enhancedResult && scanningRef.current) {
+            console.log('[Scanner] ZXing detected via enhanced processing');
+            handleDetection(enhancedResult);
+          }
+        }, SCAN_INTERVAL_MS);
 
         if (mounted) {
           if (initTimeoutRef.current) {
@@ -394,7 +700,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
             initTimeoutRef.current = null;
           }
           setStatus('scanning');
-          console.log('[Scanner] ZXing started successfully');
+          console.log('[Scanner] ZXing started with dual detection');
         }
       } catch (e: any) {
         console.error('[Scanner] ZXing failed:', e.name, e.message);
@@ -413,15 +719,15 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
       mounted = false;
       cleanup();
     };
-  }, [cleanup, handleDetection, startNativeScanning, status]);
+  }, [cleanup, handleDetection, startNativeScanning, enhanceContrast, status]);
 
   // Manual barcode submission
   const handleManualSubmit = () => {
     const barcode = manualBarcode.trim();
     if (barcode.length >= 6) {
-      // Block future scans of this barcode
       lastScannedBarcodeRef.current = barcode;
       lastScanTimeRef.current = Date.now();
+      setShowFallback(false);
       onScan(barcode);
       setManualBarcode('');
     }
@@ -446,7 +752,6 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     background: '#000',
     borderRadius: '12px',
     overflow: 'hidden',
-    // Fill available viewport height minus some padding for header
     minHeight: 'calc(100vh - 280px)',
     maxHeight: 'calc(100vh - 200px)',
     display: 'flex',
@@ -456,7 +761,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   return (
     <div style={containerStyle}>
       {/* Camera View */}
-      <div style={{ flex: 1, position: 'relative', minHeight: fullScreen ? 0 : '350px', overflow: 'hidden' }}>
+      <div style={{ flex: 1, position: 'relative', minHeight: fullScreen ? 0 : '300px', overflow: 'hidden' }}>
         <video
           ref={videoRef}
           autoPlay
@@ -473,6 +778,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           }}
         />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
+        <canvas ref={processCanvasRef} style={{ display: 'none' }} />
 
         {/* Initializing state */}
         {status === 'initializing' && (
@@ -533,7 +839,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           </div>
         )}
 
-        {/* Success flash overlay - LARGE and obvious */}
+        {/* Success flash overlay */}
         {showFlash && (
           <div style={{
             position: 'absolute',
@@ -572,7 +878,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           </div>
         )}
 
-        {/* Scanning overlay */}
+        {/* Scanning overlay with controls */}
         {(status === 'scanning' || status === 'cooldown') && !showFlash && (
           <>
             {/* Top instruction bar */}
@@ -590,7 +896,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
                 {status === 'cooldown' ? 'Item scanned!' : 'Point at barcode'}
               </div>
               <div style={{ fontSize: '12px', opacity: 0.8 }}>
-                Hold steady for best results
+                Hold steady • Works with difficult barcodes
               </div>
             </div>
 
@@ -617,6 +923,34 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+
+            {/* Torch button */}
+            {torchAvailable && (
+              <button
+                onClick={toggleTorch}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  left: '16px',
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: torchOn ? '#fbbf24' : 'rgba(0,0,0,0.5)',
+                  border: 'none',
+                  color: torchOn ? '#000' : '#fff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                  <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
                 </svg>
               </button>
             )}
@@ -650,49 +984,126 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
         )}
       </div>
 
-      {/* Manual Entry Section */}
+      {/* Fallback Options (shown after 6 seconds) */}
+      {showFallback && !showFlash && (status === 'scanning' || status === 'cooldown') && (
+        <div style={{
+          padding: '12px 16px',
+          background: '#fef3c7',
+          borderTop: '1px solid #f59e0b',
+        }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#92400e', marginBottom: '8px', textAlign: 'center' }}>
+            Having trouble? Try these options:
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoCapture}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoProcessing}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#f59e0b',
+                color: '#000',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 600,
+                cursor: photoProcessing ? 'wait' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              {photoProcessing ? 'Processing...' : 'Take Photo'}
+            </button>
+            {torchAvailable && !torchOn && (
+              <button
+                onClick={toggleTorch}
+                style={{
+                  padding: '12px 16px',
+                  background: '#374151',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                  <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
+                </svg>
+                Light
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Manual Entry Section - More prominent */}
       <div style={{
         padding: '16px',
         background: fullScreen ? 'rgba(0,0,0,0.9)' : '#1a1a2e',
       }}>
-        <div style={{ marginBottom: '8px', color: '#9ca3af', fontSize: '13px', textAlign: 'center' }}>
-          Or enter barcode manually:
+        <div style={{ marginBottom: '10px', color: '#fff', fontSize: '14px', fontWeight: 600, textAlign: 'center' }}>
+          Enter barcode manually
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <input
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            placeholder="Type barcode number..."
+            placeholder="Type numbers from barcode..."
             value={manualBarcode}
             onChange={(e) => setManualBarcode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
             style={{
               flex: 1,
-              padding: '14px 16px',
-              fontSize: '16px',
-              border: '2px solid #374151',
-              borderRadius: '10px',
+              padding: '16px 18px',
+              fontSize: '18px',
+              border: '2px solid #4b5563',
+              borderRadius: '12px',
               background: '#1f2937',
               color: '#fff',
               outline: 'none',
+              fontFamily: 'monospace',
             }}
           />
           <button
             onClick={handleManualSubmit}
             disabled={manualBarcode.trim().length < 6}
             style={{
-              padding: '14px 24px',
+              padding: '16px 28px',
               background: manualBarcode.trim().length >= 6 ? '#FF580F' : '#374151',
               color: '#fff',
               border: 'none',
-              borderRadius: '10px',
-              fontWeight: 600,
+              borderRadius: '12px',
+              fontWeight: 700,
+              fontSize: '16px',
               cursor: manualBarcode.trim().length >= 6 ? 'pointer' : 'not-allowed',
             }}
           >
             Add
           </button>
+        </div>
+        <div style={{ marginTop: '8px', color: '#6b7280', fontSize: '12px', textAlign: 'center' }}>
+          Look for numbers below the barcode lines (e.g., 071817040282)
         </div>
       </div>
 
