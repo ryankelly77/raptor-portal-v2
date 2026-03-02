@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { AdminShell } from '../components/AdminShell';
 import styles from './inventory.module.css';
 
+// BUILD VERSION - update this to verify deployment
+const BUILD_VERSION = 'v2024-MAR01-A';
+
 interface Product {
   id: string;
   name: string;
@@ -183,6 +186,11 @@ export default function InventoryPage() {
   return (
     <AdminShell title="Inventory">
       <div className={styles.inventoryPage}>
+        {/* Build Version - TEMPORARY */}
+        <div style={{ background: '#fef3c7', color: '#92400e', padding: '8px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px', fontFamily: 'monospace' }}>
+          Build: {BUILD_VERSION}
+        </div>
+
         {/* Summary Cards */}
         <div className={styles.summaryGrid}>
           <div className={styles.summaryCard}>
