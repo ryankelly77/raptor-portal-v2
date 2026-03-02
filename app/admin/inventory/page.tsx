@@ -166,9 +166,11 @@ export default function InventoryPage() {
       // Create maps for lookups
       const productsMap = new Map(productsList.map(p => [p.id, p]));
       const purchasesMap = new Map(purchasesList.map(p => [p.id, p]));
-      const expSettingsMap = new Map(expSettings.map((s: { category: string; warning_days: number; critical_days: number }) => [s.category, s]));
+      const expSettingsMap = new Map<string, { category: string; warning_days: number; critical_days: number }>(
+        expSettings.map((s: { category: string; warning_days: number; critical_days: number }) => [s.category, s])
+      );
 
-      const getExpSettings = (category: string) => {
+      const getExpSettings = (category: string): { warning_days: number; critical_days: number } => {
         return expSettingsMap.get(category) || { warning_days: 14, critical_days: 3 };
       };
 
