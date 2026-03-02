@@ -209,6 +209,9 @@ function sanitizeFields(table: string, fields: Record<string, unknown>): Record<
   return sanitized;
 }
 
+// Fields that are numeric (not strings)
+const NUMERIC_FIELDS = ['quantity', 'unit_cost', 'default_price', 'receipt_total', 'sort_order', 'phase_number', 'stop_number'];
+
 // Validate required fields for create
 function validateRequiredFields(table: string, data: Record<string, unknown>): { valid: boolean; error?: string } {
   const config = TABLE_CONFIG[table];
@@ -218,6 +221,11 @@ function validateRequiredFields(table: string, data: Record<string, unknown>): {
     if (field.endsWith('_id')) {
       if (!isValidId(data[field])) {
         return { valid: false, error: `Valid ${field} is required` };
+      }
+    } else if (NUMERIC_FIELDS.includes(field)) {
+      // Numeric fields - allow 0 but not null/undefined
+      if (data[field] === null || data[field] === undefined) {
+        return { valid: false, error: `${field} is required` };
       }
     } else {
       if (!isNonEmptyString(data[field])) {
