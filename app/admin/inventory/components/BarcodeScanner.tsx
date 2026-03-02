@@ -40,6 +40,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   const [manualBarcode, setManualBarcode] = useState('');
   const [scannerType, setScannerType] = useState<'native' | 'html5' | null>(null);
   const [showFlash, setShowFlash] = useState(false);
+  const [cameraHint, setCameraHint] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -49,12 +50,19 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
   const animationRef = useRef<number | null>(null);
   const html5ScannerRef = useRef<any>(null);
   const lastScanTimeRef = useRef<number>(0);
+  const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const containerId = 'html5-scanner-container';
 
   // Cleanup function
   const cleanup = useCallback(() => {
+    console.log('[Scanner] Cleaning up...');
     scanningRef.current = false;
+
+    if (initTimeoutRef.current) {
+      clearTimeout(initTimeoutRef.current);
+      initTimeoutRef.current = null;
+    }
 
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -62,7 +70,10 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     }
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach(track => {
+        console.log('[Scanner] Stopping track:', track.kind, track.label);
+        track.stop();
+      });
       streamRef.current = null;
     }
 
@@ -83,6 +94,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     if (now - lastScanTimeRef.current < 1000) return;
     if (barcode === lastScanned) return;
 
+    console.log('[Scanner] Detected barcode:', barcode);
     lastScanTimeRef.current = now;
     setLastScanned(barcode);
     setStatus('success');
@@ -119,7 +131,10 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
 
   // Native BarcodeDetector scanning loop
   const startNativeScanning = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || !detectorRef.current) return;
+    if (!videoRef.current || !canvasRef.current || !detectorRef.current) {
+      console.log('[Scanner] Cannot start native scanning - missing refs');
+      return;
+    }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -127,6 +142,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     if (!ctx) return;
 
     scanningRef.current = true;
+    console.log('[Scanner] Starting native scanning loop');
 
     const scan = async () => {
       if (!scanningRef.current) return;
@@ -166,35 +182,46 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     let mounted = true;
 
     const init = async () => {
-      console.log('[Scanner] Initializing...');
+      // Check BarcodeDetector availability
+      const hasBarcodeDetector = 'BarcodeDetector' in window;
+      console.log('[Scanner] BarcodeDetector available:', hasBarcodeDetector);
 
       // Check if camera is available
       if (!navigator.mediaDevices?.getUserMedia) {
+        console.error('[Scanner] getUserMedia not available');
         setErrorMsg('Camera not available. Make sure you\'re using HTTPS.');
         setStatus('error');
         return;
       }
 
-      // Try Native BarcodeDetector first
-      if ('BarcodeDetector' in window) {
+      // Set a timeout to show hint if camera takes too long
+      initTimeoutRef.current = setTimeout(() => {
+        if (status === 'initializing') {
+          setCameraHint('Camera not loading? Try refreshing the page or use manual entry below.');
+        }
+      }, 3000);
+
+      // Try Native BarcodeDetector first (Safari 17+, Chrome Android)
+      if (hasBarcodeDetector) {
         try {
           const supportedFormats = await BarcodeDetector.getSupportedFormats();
-          console.log('[Scanner] Native BarcodeDetector formats:', supportedFormats);
+          console.log('[Scanner] Supported formats:', supportedFormats);
 
           const formatsToUse = BARCODE_FORMATS.filter(f => supportedFormats.includes(f));
 
           if (formatsToUse.length >= 3) {
-            console.log('[Scanner] Using Native BarcodeDetector with formats:', formatsToUse);
+            console.log('[Scanner] Using Native BarcodeDetector with:', formatsToUse);
             detectorRef.current = new BarcodeDetector({ formats: formatsToUse });
 
-            // Request high resolution camera
+            // Request camera with Safari-compatible settings
+            console.log('[Scanner] Requesting camera stream...');
             const stream = await navigator.mediaDevices.getUserMedia({
               video: {
                 facingMode: 'environment',
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
               },
-              audio: false,
+              audio: false
             });
 
             if (!mounted) {
@@ -202,33 +229,61 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
               return;
             }
 
+            console.log('[Scanner] Got stream:', stream.active, 'tracks:', stream.getTracks().length);
             streamRef.current = stream;
 
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
+            const video = videoRef.current;
+            if (video) {
+              // Safari-specific: set attributes explicitly
+              video.setAttribute('playsinline', 'true');
+              video.setAttribute('autoplay', 'true');
+              video.setAttribute('muted', 'true');
 
-              // Wait for video to be ready
-              await new Promise<void>((resolve) => {
-                const video = videoRef.current!;
-                if (video.readyState >= 2) {
-                  resolve();
-                } else {
-                  video.onloadeddata = () => resolve();
-                }
+              // Set the stream
+              video.srcObject = stream;
+
+              // Wait for metadata then play
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('Video load timeout')), 5000);
+
+                video.onloadedmetadata = async () => {
+                  clearTimeout(timeout);
+                  console.log('[Scanner] Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
+                  try {
+                    await video.play();
+                    console.log('[Scanner] Video playing:', !video.paused);
+                    resolve();
+                  } catch (playErr) {
+                    console.error('[Scanner] Video play error:', playErr);
+                    reject(playErr);
+                  }
+                };
+
+                video.onerror = () => {
+                  clearTimeout(timeout);
+                  reject(new Error('Video error'));
+                };
               });
 
-              await videoRef.current.play();
-              setScannerType('native');
-              setStatus('scanning');
-              startNativeScanning();
-              console.log('[Scanner] Native scanner started successfully');
-              return;
+              if (mounted) {
+                if (initTimeoutRef.current) {
+                  clearTimeout(initTimeoutRef.current);
+                  initTimeoutRef.current = null;
+                }
+                setScannerType('native');
+                setStatus('scanning');
+                startNativeScanning();
+                console.log('[Scanner] Native scanner started successfully');
+                return;
+              }
             }
+          } else {
+            console.log('[Scanner] Not enough barcode formats supported');
           }
         } catch (e: any) {
-          console.warn('[Scanner] Native BarcodeDetector failed:', e.message);
+          console.error('[Scanner] Native BarcodeDetector error:', e.name, e.message);
           if (e.name === 'NotAllowedError') {
-            setErrorMsg('Camera permission denied. Please allow camera access.');
+            setErrorMsg('Camera permission denied. Please allow camera access and refresh.');
             setStatus('error');
             return;
           }
@@ -255,9 +310,16 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           Html5QrcodeSupportedFormats.CODABAR,
         ];
 
+        // Need to set scannerType first so the container div renders
+        setScannerType('html5');
+
+        // Wait a tick for React to render the container
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         const scanner = new Html5Qrcode(containerId, { formatsToSupport: formats, verbose: false });
         html5ScannerRef.current = scanner;
 
+        console.log('[Scanner] Starting html5-qrcode...');
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, aspectRatio: 16/9 },
@@ -265,12 +327,21 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           () => {}
         );
 
-        setScannerType('html5');
-        setStatus('scanning');
-        console.log('[Scanner] html5-qrcode started successfully');
+        if (mounted) {
+          if (initTimeoutRef.current) {
+            clearTimeout(initTimeoutRef.current);
+            initTimeoutRef.current = null;
+          }
+          setStatus('scanning');
+          console.log('[Scanner] html5-qrcode started successfully');
+        }
       } catch (e: any) {
-        console.error('[Scanner] html5-qrcode failed:', e);
-        setErrorMsg(e.message || 'Could not start camera');
+        console.error('[Scanner] html5-qrcode failed:', e.name, e.message);
+        if (e.name === 'NotAllowedError' || e.message?.includes('Permission')) {
+          setErrorMsg('Camera permission denied. Please allow camera access and refresh.');
+        } else {
+          setErrorMsg(e.message || 'Could not start camera');
+        }
         setStatus('error');
       }
     };
@@ -281,7 +352,7 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
       mounted = false;
       cleanup();
     };
-  }, [cleanup, handleDetection, startNativeScanning]);
+  }, [cleanup, handleDetection, startNativeScanning, status]);
 
   // Manual barcode submission
   const handleManualSubmit = () => {
@@ -317,18 +388,18 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
     <div style={containerStyle}>
       {/* Camera View */}
       <div style={{ flex: 1, position: 'relative', minHeight: fullScreen ? 0 : '300px' }}>
-        {/* Native scanner video */}
+        {/* Native scanner video - SAFARI FIX: playsInline must be camelCase in JSX */}
         <video
           ref={videoRef}
+          autoPlay
+          playsInline
+          muted
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'cover',
             display: scannerType === 'native' ? 'block' : 'none',
           }}
-          playsInline
-          muted
-          autoPlay
         />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
@@ -356,6 +427,11 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
           }}>
             <div className={styles.spinner} style={{ borderTopColor: '#FF580F', marginBottom: '16px' }} />
             <span>Starting camera...</span>
+            {cameraHint && (
+              <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px', maxWidth: '280px', textAlign: 'center', fontSize: '13px' }}>
+                {cameraHint}
+              </div>
+            )}
           </div>
         )}
 
@@ -379,7 +455,20 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
               <line x1="9" y1="9" x2="15" y2="15" />
             </svg>
             <div style={{ color: '#ef4444', marginBottom: '8px', fontWeight: 600 }}>Camera Error</div>
-            <div style={{ color: '#9ca3af', fontSize: '14px' }}>{errorMsg}</div>
+            <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '16px' }}>{errorMsg}</div>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 20px',
+                background: '#374151',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+              }}
+            >
+              Refresh Page
+            </button>
           </div>
         )}
 
@@ -408,8 +497,8 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
               textAlign: 'center',
             }}>
               <div style={{ fontWeight: 600, marginBottom: '4px' }}>Point at barcode</div>
-              <div style={{ fontSize: '13px', opacity: 0.8 }}>
-                Any angle works {scannerType === 'native' ? '(Native API)' : '(html5-qrcode)'}
+              <div style={{ fontSize: '12px', opacity: 0.8 }}>
+                {scannerType === 'native' ? 'Native API - any angle works' : 'html5-qrcode fallback'}
               </div>
             </div>
 
@@ -472,12 +561,15 @@ export function BarcodeScanner({ onScan, onClose, fullScreen = false }: BarcodeS
         padding: '16px',
         background: fullScreen ? 'rgba(0,0,0,0.9)' : '#1a1a2e',
       }}>
+        <div style={{ marginBottom: '8px', color: '#9ca3af', fontSize: '13px', textAlign: 'center' }}>
+          Or enter barcode manually:
+        </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <input
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            placeholder="Enter barcode manually..."
+            placeholder="Type barcode number..."
             value={manualBarcode}
             onChange={(e) => setManualBarcode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
