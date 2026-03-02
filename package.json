@@ -17,7 +17,8 @@
     "next": "16.1.6",
     "openai": "^6.25.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",
