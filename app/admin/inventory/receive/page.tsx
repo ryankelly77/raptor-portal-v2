@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-D';
+const BUILD_VERSION = 'v2024-MAR02-E';
 
 interface ErrorInfo {
   message: string;
@@ -977,32 +977,45 @@ export default function ReceiveItemsPage() {
                                     i === aiParsedItems.indexOf(aiItem) ? { ...item, accepted: true } : item
                                   ));
                                   // Update the scanned item with the price
-                                  const existingItem = items.find(i => i.productId === aiItem.product_id);
+                                  // Check by productId OR by barcode to find existing item
+                                  const existingByProductId = items.find(i => i.productId === aiItem.product_id);
+                                  const existingByBarcode = product ? items.find(i => i.barcode === product.barcode) : null;
+                                  const existingItem = existingByProductId || existingByBarcode;
+
                                   if (existingItem) {
+                                    // Update existing item with price from receipt
                                     setItems(prev => prev.map(i =>
-                                      i.productId === aiItem.product_id
-                                        ? { ...i, unitCost: aiItem.price.toFixed(2), quantity: aiItem.quantity, matchedOcrLine: aiItem.receipt_text, matchConfidence: `ai-${aiItem.confidence}` as const }
+                                      (i.productId === aiItem.product_id || (product && i.barcode === product.barcode))
+                                        ? { ...i, unitCost: aiItem.price.toFixed(2), matchedOcrLine: aiItem.receipt_text, matchConfidence: `ai-${aiItem.confidence}` as const }
                                         : i
                                     ));
+                                    console.log('[Accept] Updated existing item:', existingItem.name, 'with price:', aiItem.price);
                                   } else if (product) {
-                                    // Add to items with package info from product
-                                    const newItem: ScannedItem = {
-                                      barcode: product.barcode,
-                                      name: product.name,
-                                      brand: product.brand,
-                                      category: product.category,
-                                      quantity: aiItem.quantity,
-                                      unitCost: aiItem.price.toFixed(2),
-                                      productId: product.id,
-                                      isNew: false,
-                                      matchConfidence: `ai-${aiItem.confidence}` as const,
-                                      matchedOcrLine: aiItem.receipt_text,
-                                      // Package info
-                                      units_per_package: product.units_per_package || 1,
-                                      unit_name: product.unit_name || 'each',
-                                      package_name: product.package_name || 'each',
-                                    };
-                                    setItems(prev => [...prev, newItem]);
+                                    // Only add new item if not already in list (double-check)
+                                    const alreadyExists = items.some(i => i.barcode === product.barcode || i.productId === product.id);
+                                    if (!alreadyExists) {
+                                      // Add to items with package info from product
+                                      const newItem: ScannedItem = {
+                                        barcode: product.barcode,
+                                        name: product.name,
+                                        brand: product.brand,
+                                        category: product.category,
+                                        quantity: aiItem.quantity,
+                                        unitCost: aiItem.price.toFixed(2),
+                                        productId: product.id,
+                                        isNew: false,
+                                        matchConfidence: `ai-${aiItem.confidence}` as const,
+                                        matchedOcrLine: aiItem.receipt_text,
+                                        // Package info
+                                        units_per_package: product.units_per_package || 1,
+                                        unit_name: product.unit_name || 'each',
+                                        package_name: product.package_name || 'each',
+                                      };
+                                      setItems(prev => [...prev, newItem]);
+                                      console.log('[Accept] Added new item:', product.name);
+                                    } else {
+                                      console.log('[Accept] Skipped duplicate:', product.name);
+                                    }
                                   }
                                   // Save alias if not exists
                                   if (!aliasExists && aiItem.product_id && product) {
@@ -1292,10 +1305,18 @@ export default function ReceiveItemsPage() {
                   </h3>
                   {unmatchedScanned.map((item) => (
                     <div key={item.barcode} style={{ padding: '12px', background: '#fef2f2', border: '1px solid #dc2626', borderRadius: '10px', marginBottom: '8px' }}>
-                      <div style={{ marginBottom: '8px' }}>
-                        {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
-                        <div style={{ fontWeight: 600 }}>{item.name}</div>
-                        <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div>
+                          {item.brand && <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase' }}>{item.brand}</div>}
+                          <div style={{ fontWeight: 600 }}>{item.name}</div>
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
+                        </div>
+                        <button
+                          onClick={() => removeItem(item.barcode)}
+                          style={{ padding: '4px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
