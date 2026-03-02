@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AdminShell } from '../components/AdminShell';
+import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR01-D';
+const BUILD_VERSION = 'v2024-MAR01-E';
 
 interface Product {
   id: string;
@@ -34,14 +35,6 @@ interface SummaryStats {
   totalValue: number;
 }
 
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,9 +53,8 @@ export default function InventoryPage() {
       setError(null);
 
       // Load products
-      const productsRes = await fetch('/api/admin/crud', {
+      const productsRes = await adminFetch('/api/admin/crud', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ table: 'products', action: 'read' }),
       });
 
@@ -76,9 +68,8 @@ export default function InventoryPage() {
       setProducts(productsList);
 
       // Load movements
-      const movementsRes = await fetch('/api/admin/crud', {
+      const movementsRes = await adminFetch('/api/admin/crud', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ table: 'inventory_movements', action: 'read' }),
       });
       const movementsData = await movementsRes.json();
@@ -127,7 +118,10 @@ export default function InventoryPage() {
       });
     } catch (err) {
       console.error('Error loading inventory data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      // Don't show error for auth errors - they redirect to login
+      if (!(err instanceof AuthError)) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      }
     } finally {
       setLoading(false);
     }

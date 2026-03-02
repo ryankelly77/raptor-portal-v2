@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import { AdminShell } from '../../components/AdminShell';
 import { BarcodeScanner } from '../components/BarcodeScanner';
 import { BarcodeLookup } from '../components/BarcodeLookup';
+import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-D';
+const BUILD_VERSION = 'v2024-MAR01-E';
 
 interface ScannedItem {
   barcode: string;
@@ -25,15 +26,6 @@ interface ScannedItem {
 interface OCRItem {
   text: string;
   price: number | null;
-}
-
-// Get auth headers for JSON requests
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
 }
 
 export default function ReceiveItemsPage() {
@@ -136,24 +128,15 @@ export default function ReceiveItemsPage() {
       };
       reader.readAsDataURL(file);
 
-      // Get token for upload
-      const token = sessionStorage.getItem('adminToken');
-      if (!token) {
-        setError('Not logged in. Please refresh and log in again.');
-        setReceiptUploading(false);
-        return;
-      }
-
-      // Upload to Supabase
+      // Upload to Supabase via admin API
       const formData = new FormData();
       formData.append('file', file);
       formData.append('folder', 'receipts');
 
       console.log('[Receive] Uploading receipt...');
 
-      const uploadRes = await fetch('/api/admin/upload', {
+      const uploadRes = await adminFetch('/api/admin/upload', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       const uploadData = await uploadRes.json();
@@ -234,7 +217,10 @@ export default function ReceiveItemsPage() {
 
     } catch (err: any) {
       console.error('[Receive] Receipt error:', err);
-      setError(err.message || 'Failed to upload receipt');
+      // Don't show error for auth errors - they redirect to login
+      if (!(err instanceof AuthError)) {
+        setError(err.message || 'Failed to upload receipt');
+      }
     } finally {
       setReceiptUploading(false);
     }
@@ -257,24 +243,11 @@ export default function ReceiveItemsPage() {
     setError(null);
 
     try {
-      const token = sessionStorage.getItem('adminToken');
-      if (!token) {
-        setError('Not logged in. Please refresh and log in again.');
-        setSaving(false);
-        return;
-      }
-
-      const headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
-
       console.log('[Save] Creating purchase record...');
 
       // 1. Create purchase record
-      const purchaseRes = await fetch('/api/admin/crud', {
+      const purchaseRes = await adminFetch('/api/admin/crud', {
         method: 'POST',
-        headers,
         body: JSON.stringify({
           table: 'inventory_purchases',
           action: 'create',
@@ -305,9 +278,8 @@ export default function ReceiveItemsPage() {
 
         // Create new product if needed
         if (!productId) {
-          const prodRes = await fetch('/api/admin/crud', {
+          const prodRes = await adminFetch('/api/admin/crud', {
             method: 'POST',
-            headers,
             body: JSON.stringify({
               table: 'products',
               action: 'create',
@@ -331,9 +303,8 @@ export default function ReceiveItemsPage() {
         }
 
         // Create purchase item
-        await fetch('/api/admin/crud', {
+        await adminFetch('/api/admin/crud', {
           method: 'POST',
-          headers,
           body: JSON.stringify({
             table: 'inventory_purchase_items',
             action: 'create',
@@ -347,9 +318,8 @@ export default function ReceiveItemsPage() {
         });
 
         // Create inventory movement
-        await fetch('/api/admin/crud', {
+        await adminFetch('/api/admin/crud', {
           method: 'POST',
-          headers,
           body: JSON.stringify({
             table: 'inventory_movements',
             action: 'create',
@@ -370,7 +340,10 @@ export default function ReceiveItemsPage() {
 
     } catch (err: any) {
       console.error('[Receive] Save error:', err);
-      setError(err.message || 'Failed to save purchase');
+      // Don't show error for auth errors - they redirect to login
+      if (!(err instanceof AuthError)) {
+        setError(err.message || 'Failed to save purchase');
+      }
     } finally {
       setSaving(false);
     }

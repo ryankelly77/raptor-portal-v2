@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { AdminShell } from '../../components/AdminShell';
+import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 interface Product {
@@ -22,14 +23,6 @@ interface Movement {
   product?: Product;
 }
 
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 export default function MovementsPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -41,14 +34,12 @@ export default function MovementsPage() {
       setLoading(true);
 
       const [movementsRes, productsRes] = await Promise.all([
-        fetch('/api/admin/crud', {
+        adminFetch('/api/admin/crud', {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({ table: 'inventory_movements', action: 'read' }),
         }),
-        fetch('/api/admin/crud', {
+        adminFetch('/api/admin/crud', {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({ table: 'products', action: 'read' }),
         }),
       ]);
@@ -68,6 +59,7 @@ export default function MovementsPage() {
       setMovements(movementsList);
     } catch (err) {
       console.error('Error loading movements:', err);
+      // AuthError will redirect to login, no need to show error
     } finally {
       setLoading(false);
     }

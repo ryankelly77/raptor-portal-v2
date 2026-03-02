@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AdminShell } from '../../components/AdminShell';
 import { BrandNormalizer } from '../components/BrandNormalizer';
+import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 interface Product {
@@ -15,14 +16,6 @@ interface Product {
   image_url: string | null;
   is_active: boolean;
   created_at: string;
-}
-
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
 }
 
 export default function ProductsPage() {
@@ -47,15 +40,17 @@ export default function ProductsPage() {
   const loadProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/admin/crud', {
+      const res = await adminFetch('/api/admin/crud', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ table: 'products', action: 'read' }),
       });
       const data = await res.json();
       setProducts(data.data || []);
     } catch (err) {
       console.error('Error loading products:', err);
+      if (!(err instanceof AuthError)) {
+        // Only show error for non-auth errors
+      }
     } finally {
       setLoading(false);
     }
@@ -147,9 +142,8 @@ export default function ProductsPage() {
       };
 
       if (editingProduct) {
-        await fetch('/api/admin/crud', {
+        await adminFetch('/api/admin/crud', {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({
             table: 'products',
             action: 'update',
@@ -158,9 +152,8 @@ export default function ProductsPage() {
           }),
         });
       } else {
-        await fetch('/api/admin/crud', {
+        await adminFetch('/api/admin/crud', {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({
             table: 'products',
             action: 'create',
@@ -183,9 +176,8 @@ export default function ProductsPage() {
     if (!confirm(`Delete "${product.brand ? product.brand + ' ' : ''}${product.name}"?`)) return;
 
     try {
-      await fetch('/api/admin/crud', {
+      await adminFetch('/api/admin/crud', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({
           table: 'products',
           action: 'delete',
@@ -195,7 +187,9 @@ export default function ProductsPage() {
       await loadProducts();
     } catch (err) {
       console.error('Error deleting product:', err);
-      alert('Error deleting product');
+      if (!(err instanceof AuthError)) {
+        alert('Error deleting product');
+      }
     }
   }
 

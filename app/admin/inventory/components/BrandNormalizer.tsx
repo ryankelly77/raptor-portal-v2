@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 interface Product {
@@ -18,14 +19,6 @@ interface BrandGroup {
 interface BrandNormalizerProps {
   onClose: () => void;
   onComplete: () => void;
-}
-
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
 }
 
 // Find similar brand groups using fuzzy matching
@@ -96,9 +89,8 @@ export function BrandNormalizer({ onClose, onComplete }: BrandNormalizerProps) {
   useEffect(() => {
     async function loadProducts() {
       try {
-        const res = await fetch('/api/admin/crud', {
+        const res = await adminFetch('/api/admin/crud', {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({ table: 'products', action: 'read' }),
         });
         const data = await res.json();
@@ -116,6 +108,7 @@ export function BrandNormalizer({ onClose, onComplete }: BrandNormalizerProps) {
         setSelectedBrands(preselected);
       } catch (err) {
         console.error('Error loading products:', err);
+        // AuthError will redirect to login
       } finally {
         setLoading(false);
       }
@@ -134,9 +127,8 @@ export function BrandNormalizer({ onClose, onComplete }: BrandNormalizerProps) {
         // Update all products in the group to use the canonical brand
         for (const product of group.products) {
           if (product.brand !== canonicalBrand) {
-            await fetch('/api/admin/crud', {
+            await adminFetch('/api/admin/crud', {
               method: 'POST',
-              headers: getAuthHeaders(),
               body: JSON.stringify({
                 table: 'products',
                 action: 'update',

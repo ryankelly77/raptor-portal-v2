@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 interface Product {
@@ -35,14 +36,6 @@ interface LookupResult {
 interface BarcodeLookupProps {
   barcode: string;
   onResult: (result: LookupResult) => void;
-}
-
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
 }
 
 // Find similar brand in existing brands
@@ -102,9 +95,8 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
 
     try {
       // Step 1: Fetch existing products to get brands AND check for barcode
-      const res = await fetch('/api/admin/crud', {
+      const res = await adminFetch('/api/admin/crud', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ table: 'products', action: 'read' }),
       });
 
@@ -230,7 +222,10 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
       setBrandFilter('');
     } catch (err) {
       console.error('Lookup error:', err);
-      setError(err instanceof Error ? err.message : 'Lookup failed');
+      // Don't show error for auth errors - they redirect to login
+      if (!(err instanceof AuthError)) {
+        setError(err instanceof Error ? err.message : 'Lookup failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -272,9 +267,8 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
         default_price: formData.default_price ? parseFloat(formData.default_price) : null,
       };
 
-      const saveRes = await fetch('/api/admin/crud', {
+      const saveRes = await adminFetch('/api/admin/crud', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ table: 'products', action: 'create', data: productData }),
       });
 
@@ -297,7 +291,10 @@ export function BarcodeLookup({ barcode, onResult }: BarcodeLookupProps) {
       }
     } catch (err) {
       console.error('Save error:', err);
-      alert('Error saving product: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      // Don't show error for auth errors - they redirect to login
+      if (!(err instanceof AuthError)) {
+        alert('Error saving product: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      }
     } finally {
       setSaving(false);
     }
