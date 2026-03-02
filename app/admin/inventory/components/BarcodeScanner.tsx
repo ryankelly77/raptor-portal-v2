@@ -29,6 +29,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [manualBarcode, setManualBarcode] = useState('');
   const [showTips, setShowTips] = useState(false);
   const [scannerType, setScannerType] = useState<'native' | 'html5' | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scannerRef = useRef<any>(null);
@@ -133,6 +134,13 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     let mounted = true;
 
     const startScanner = async () => {
+      // Check for camera API support first
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setErrorMsg('Camera not supported. Please use HTTPS or a different browser.');
+        setStatus('error');
+        return;
+      }
+
       // Try native BarcodeDetector first (fastest, best orientation support)
       if ('BarcodeDetector' in window) {
         try {
@@ -146,9 +154,9 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             const stream = await navigator.mediaDevices.getUserMedia({
               video: {
                 facingMode: { ideal: 'environment' },
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 },
-                frameRate: { ideal: 30, min: 15 },
+                width: { ideal: 1920, min: 640 },
+                height: { ideal: 1080, min: 480 },
+                frameRate: { ideal: 30, min: 10 },
               },
             });
 
@@ -158,24 +166,50 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             }
 
             streamRef.current = stream;
-            setScannerType('native');
 
             if (videoRef.current) {
               videoRef.current.srcObject = stream;
-              await videoRef.current.play();
+
+              // Wait for video to be ready
+              await new Promise<void>((resolve, reject) => {
+                const video = videoRef.current!;
+                video.onloadedmetadata = () => resolve();
+                video.onerror = () => reject(new Error('Video failed to load'));
+                // Timeout after 5 seconds
+                setTimeout(() => reject(new Error('Video load timeout')), 5000);
+              });
+
+              try {
+                await videoRef.current.play();
+              } catch (playErr: any) {
+                console.error('Video play error:', playErr);
+                throw new Error('Could not start video preview');
+              }
 
               if (mounted) {
+                setScannerType('native');
                 setStatus('scanning');
                 startNativeScanning();
                 tipsTimerRef.current = setTimeout(() => {
                   if (mounted) setShowTips(true);
                 }, 8000);
               }
+            } else {
+              throw new Error('Video element not found');
             }
             return;
           }
-        } catch (e) {
-          console.log('Native BarcodeDetector failed, falling back to html5-qrcode');
+        } catch (e: any) {
+          console.log('Native BarcodeDetector error:', e?.name, e?.message);
+          // If it's a permission error, don't try the fallback - show the error
+          if (e?.name === 'NotAllowedError' || e?.message?.includes('Permission')) {
+            if (mounted) {
+              setErrorMsg('Camera permission denied. Please allow camera access and try again.');
+              setStatus('error');
+            }
+            return;
+          }
+          // Otherwise fall through to html5-qrcode
         }
       }
 
@@ -185,9 +219,22 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
 
         if (!mounted) return;
 
-        const devices = await Html5Qrcode.getCameras();
+        let devices;
+        try {
+          devices = await Html5Qrcode.getCameras();
+        } catch (camErr: any) {
+          console.error('Camera enumeration error:', camErr);
+          if (camErr?.message?.includes('Permission') || camErr?.name === 'NotAllowedError') {
+            setErrorMsg('Camera permission denied. Please allow camera access in your browser settings.');
+          } else {
+            setErrorMsg('Could not access camera. Make sure no other app is using it.');
+          }
+          setStatus('error');
+          return;
+        }
+
         if (!devices || devices.length === 0) {
-          setErrorMsg('No camera found');
+          setErrorMsg('No camera found on this device.');
           setStatus('error');
           return;
         }
@@ -236,12 +283,17 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           }, 8000);
         }
       } catch (err: any) {
-        console.error('Scanner error:', err);
+        console.error('Scanner start error:', err?.name, err?.message, err);
         if (mounted) {
-          if (err?.message?.includes('Permission')) {
-            setErrorMsg('Camera permission denied');
+          if (err?.name === 'NotAllowedError' || err?.message?.includes('Permission')) {
+            setErrorMsg('Camera permission denied. Please allow camera access and reload the page.');
+          } else if (err?.name === 'NotReadableError' || err?.message?.includes('in use') || err?.message?.includes('Could not start')) {
+            setErrorMsg('Camera is in use by another app. Close other apps using the camera and try again.');
+          } else if (err?.name === 'OverconstrainedError') {
+            setErrorMsg('Camera settings not supported. Trying with basic settings...');
+            // Could retry with simpler constraints here
           } else {
-            setErrorMsg(err?.message || 'Could not start camera');
+            setErrorMsg(err?.message || 'Could not start camera. Please try again.');
           }
           setStatus('error');
         }
@@ -254,7 +306,14 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       mounted = false;
       stopScanner();
     };
-  }, [stopScanner, startNativeScanning, handleSuccessfulScan]);
+  }, [stopScanner, startNativeScanning, handleSuccessfulScan, retryCount]);
+
+  function handleRetry() {
+    setStatus('loading');
+    setErrorMsg(null);
+    setScannerType(null);
+    setRetryCount(c => c + 1);
+  }
 
   function handleManualSubmit() {
     const barcode = manualBarcode.trim();
@@ -282,31 +341,33 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           position: 'relative',
         }}
       >
-        {/* Native detector uses video element */}
-        {scannerType === 'native' && (
-          <>
-            <video
-              ref={videoRef}
-              style={{
-                width: '100%',
-                height: '300px',
-                objectFit: 'cover',
-              }}
-              playsInline
-              muted
-              autoPlay
-            />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-          </>
-        )}
+        {/* Native detector video element - always rendered but hidden when not active */}
+        <video
+          ref={videoRef}
+          style={{
+            width: '100%',
+            height: '300px',
+            objectFit: 'cover',
+            display: scannerType === 'native' ? 'block' : 'none',
+          }}
+          playsInline
+          muted
+          autoPlay
+        />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
 
         {/* html5-qrcode container */}
-        {scannerType === 'html5' && (
-          <div id={containerId} style={{ width: '100%', minHeight: '300px' }} />
-        )}
+        <div
+          id={containerId}
+          style={{
+            width: '100%',
+            minHeight: scannerType === 'html5' ? '300px' : '0',
+            display: scannerType === 'html5' ? 'block' : 'none',
+          }}
+        />
 
         {/* Loading state */}
-        {status === 'loading' && (
+        {status === 'loading' && !scannerType && (
           <div style={{
             minHeight: '300px',
             display: 'flex',
@@ -317,6 +378,25 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           }}>
             <div className={styles.spinner} style={{ borderTopColor: '#FF580F', marginBottom: '12px' }} />
             <span>Starting camera...</span>
+          </div>
+        )}
+
+        {/* Error state overlay */}
+        {status === 'error' && !scannerType && (
+          <div style={{
+            minHeight: '300px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            padding: '20px',
+          }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" style={{ marginBottom: '12px' }}>
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <line x1="9" y1="12" x2="15" y2="12" />
+            </svg>
+            <span style={{ color: '#ef4444' }}>Camera unavailable</span>
           </div>
         )}
 
@@ -390,7 +470,22 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           borderRadius: '8px',
           marginBottom: '16px',
         }}>
-          {errorMsg}
+          <div style={{ marginBottom: '12px' }}>{errorMsg}</div>
+          <button
+            onClick={handleRetry}
+            style={{
+              width: '100%',
+              padding: '10px',
+              background: '#dc2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            Try Again
+          </button>
         </div>
       )}
 

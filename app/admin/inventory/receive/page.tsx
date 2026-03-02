@@ -18,6 +18,22 @@ interface ScannedItem {
   isNew?: boolean;
 }
 
+interface OCRItem {
+  name: string;
+  quantity: number;
+  unitPrice: number | null;
+  totalPrice: number | null;
+}
+
+interface OCRData {
+  storeName: string | null;
+  date: string | null;
+  subtotal: number | null;
+  tax: number | null;
+  total: number | null;
+  items: OCRItem[];
+}
+
 function getAuthHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
   return {
@@ -40,6 +56,9 @@ export default function ReceiveItemsPage() {
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
   const [receiptTotal, setReceiptTotal] = useState('');
   const [receiptUploading, setReceiptUploading] = useState(false);
+  const [ocrProcessing, setOcrProcessing] = useState(false);
+  const [ocrData, setOcrData] = useState<OCRData | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleStartScanning() {
@@ -95,6 +114,9 @@ export default function ReceiveItemsPage() {
     if (!file) return;
 
     setReceiptUploading(true);
+    setOcrError(null);
+    setOcrData(null);
+
     try {
       // Upload the file
       const formData = new FormData();
@@ -113,6 +135,36 @@ export default function ReceiveItemsPage() {
 
       if (uploadData.url) {
         setReceiptImageUrl(uploadData.url);
+        setReceiptUploading(false);
+
+        // Now run OCR on the uploaded image
+        setOcrProcessing(true);
+        try {
+          const ocrRes = await fetch('/api/admin/receipt-ocr', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ imageUrl: uploadData.url }),
+          });
+          const ocrResult = await ocrRes.json();
+
+          if (ocrResult.success && ocrResult.data) {
+            setOcrData(ocrResult.data);
+            // Auto-fill the receipt total if OCR found it
+            if (ocrResult.data.total) {
+              setReceiptTotal(ocrResult.data.total.toString());
+            }
+            // Try to match OCR items to scanned items and fill prices
+            matchOcrToScannedItems(ocrResult.data.items);
+          } else {
+            setOcrError(ocrResult.error || 'Could not read receipt');
+          }
+        } catch (ocrErr) {
+          console.error('OCR error:', ocrErr);
+          setOcrError('Failed to process receipt image');
+        } finally {
+          setOcrProcessing(false);
+        }
+
         setStep('verify');
       } else {
         console.error('Upload failed:', uploadData);
@@ -124,6 +176,47 @@ export default function ReceiveItemsPage() {
     } finally {
       setReceiptUploading(false);
     }
+  }
+
+  // Match OCR items to scanned items and pre-fill prices
+  function matchOcrToScannedItems(ocrItems: OCRItem[]) {
+    if (!ocrItems || ocrItems.length === 0) return;
+
+    const updatedItems = items.map(item => {
+      // Find best match from OCR items
+      const itemNameLower = item.name.toLowerCase();
+      const itemBrandLower = (item.brand || '').toLowerCase();
+
+      for (const ocrItem of ocrItems) {
+        const ocrNameLower = ocrItem.name.toLowerCase();
+
+        // Check if OCR item name contains part of product name or brand
+        const nameWords = itemNameLower.split(/\s+/).filter(w => w.length > 3);
+        const brandWords = itemBrandLower.split(/\s+/).filter(w => w.length > 3);
+
+        const matchesName = nameWords.some(word => ocrNameLower.includes(word));
+        const matchesBrand = brandWords.some(word => ocrNameLower.includes(word));
+
+        if (matchesName || matchesBrand) {
+          // Calculate unit price
+          let unitPrice = ocrItem.unitPrice;
+          if (!unitPrice && ocrItem.totalPrice && ocrItem.quantity) {
+            unitPrice = ocrItem.totalPrice / ocrItem.quantity;
+          }
+          if (!unitPrice && ocrItem.totalPrice) {
+            // Assume quantity 1 if not specified
+            unitPrice = ocrItem.totalPrice / item.quantity;
+          }
+
+          if (unitPrice) {
+            return { ...item, unitCost: unitPrice.toFixed(2) };
+          }
+        }
+      }
+      return item;
+    });
+
+    setItems(updatedItems);
   }
 
   async function handleSaveAll() {
@@ -512,8 +605,8 @@ export default function ReceiveItemsPage() {
           {step === 'verify' && (
             <div className={styles.testCard}>
               <div className={styles.testHeader}>
-                <h2 className={styles.testTitle}>Verify Receipt Total</h2>
-                <p className={styles.testSubtitle}>Confirm the receipt total</p>
+                <h2 className={styles.testTitle}>Verify Receipt</h2>
+                <p className={styles.testSubtitle}>Review extracted prices and total</p>
               </div>
               <div className={styles.testBody}>
                 {/* Receipt Preview */}
@@ -523,17 +616,123 @@ export default function ReceiveItemsPage() {
                     <img
                       src={receiptImageUrl}
                       alt="Receipt"
-                      style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', background: '#f9fafb' }}
+                      style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', background: '#f9fafb' }}
                     />
                   </div>
                 )}
 
-                {/* Summary */}
-                <div style={{ marginBottom: '20px', padding: '12px', background: '#f3f4f6', borderRadius: '8px' }}>
-                  <div><strong>Store:</strong> {purchaseInfo.storeName}</div>
-                  <div><strong>Date:</strong> {purchaseInfo.purchaseDate}</div>
-                  <div><strong>Items:</strong> {totalItemCount}</div>
+                {/* OCR Processing Status */}
+                {ocrProcessing && (
+                  <div style={{ padding: '20px', textAlign: 'center', background: '#f0f9ff', borderRadius: '8px', marginBottom: '16px' }}>
+                    <div className={styles.spinner} style={{ borderTopColor: '#FF580F', margin: '0 auto 12px' }} />
+                    <div style={{ color: '#0369a1', fontWeight: 500 }}>Reading receipt...</div>
+                    <div style={{ color: '#64748b', fontSize: '13px' }}>Extracting items and prices</div>
+                  </div>
+                )}
+
+                {/* OCR Error */}
+                {ocrError && (
+                  <div style={{ padding: '12px', background: '#fef2f2', color: '#dc2626', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
+                    <strong>Could not read receipt:</strong> {ocrError}
+                    <div style={{ marginTop: '8px', color: '#6b7280' }}>You can still enter prices manually below.</div>
+                  </div>
+                )}
+
+                {/* OCR Success - Show extracted data */}
+                {ocrData && !ocrProcessing && (
+                  <div style={{ padding: '12px', background: '#dcfce7', color: '#16a34a', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                      <strong>Receipt processed!</strong>
+                    </div>
+                    <div style={{ color: '#166534' }}>
+                      Found {ocrData.items.length} items
+                      {ocrData.total && ` - Total: $${ocrData.total.toFixed(2)}`}
+                    </div>
+                  </div>
+                )}
+
+                {/* Items with Prices */}
+                <div style={{ marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+                    Item Prices
+                  </h3>
+                  {items.map((item) => (
+                    <div key={item.barcode} style={{
+                      padding: '12px',
+                      background: '#f9fafb',
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          {item.brand && (
+                            <div style={{ fontWeight: 700, fontSize: '11px', color: '#FF580F', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.brand}</div>
+                          )}
+                          <div style={{ fontWeight: 600, fontSize: '14px' }}>{item.name}</div>
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>Qty: {item.quantity}</div>
+                        </div>
+                        {item.unitCost && (
+                          <span style={{ fontSize: '11px', background: '#dcfce7', color: '#16a34a', padding: '2px 8px', borderRadius: '4px', height: 'fit-content' }}>
+                            Auto-filled
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#6b7280' }}>$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className={styles.formInput}
+                          value={item.unitCost}
+                          onChange={(e) => updateItemCost(item.barcode, e.target.value)}
+                          placeholder="0.00"
+                          style={{ padding: '8px 12px', flex: 1 }}
+                        />
+                        <span style={{ color: '#6b7280', fontSize: '13px' }}>per unit</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                {/* OCR Extracted Items (for reference) */}
+                {ocrData && ocrData.items.length > 0 && (
+                  <details style={{ marginBottom: '20px' }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '14px', color: '#6b7280', marginBottom: '8px' }}>
+                      View extracted receipt items ({ocrData.items.length})
+                    </summary>
+                    <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '12px', fontSize: '13px' }}>
+                      {ocrData.items.map((ocrItem, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: idx < ocrData.items.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
+                          <span>{ocrItem.name}</span>
+                          <span style={{ color: '#16a34a', fontWeight: 500 }}>
+                            {ocrItem.totalPrice ? `$${ocrItem.totalPrice.toFixed(2)}` : '-'}
+                          </span>
+                        </div>
+                      ))}
+                      {ocrData.subtotal && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 4px', borderTop: '1px solid #d1d5db', marginTop: '8px' }}>
+                          <span>Subtotal</span>
+                          <span>${ocrData.subtotal.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {ocrData.tax && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                          <span>Tax</span>
+                          <span>${ocrData.tax.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {ocrData.total && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontWeight: 600 }}>
+                          <span>Total</span>
+                          <span>${ocrData.total.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
 
                 {/* Total Input */}
                 <div className={styles.formGroup}>
@@ -548,7 +747,6 @@ export default function ReceiveItemsPage() {
                       onChange={(e) => setReceiptTotal(e.target.value)}
                       placeholder="0.00"
                       style={{ paddingLeft: '32px', fontSize: '24px', fontWeight: 600, textAlign: 'right' }}
-                      autoFocus
                     />
                   </div>
                 </div>
@@ -558,6 +756,8 @@ export default function ReceiveItemsPage() {
                   className={styles.btnSecondary}
                   onClick={() => {
                     setReceiptImageUrl(null);
+                    setOcrData(null);
+                    setOcrError(null);
                     setStep('receipt');
                   }}
                   style={{ width: '100%', marginTop: '8px' }}
@@ -572,7 +772,7 @@ export default function ReceiveItemsPage() {
                 <button
                   className={styles.btnPrimary}
                   onClick={handleSaveAll}
-                  disabled={saving || !receiptTotal}
+                  disabled={saving || !receiptTotal || ocrProcessing}
                   style={{ flex: 1 }}
                 >
                   {saving ? 'Saving...' : 'Save Purchase'}
