@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { AdminShell } from '../../components/AdminShell';
 import { adminFetch, AuthError } from '@/lib/admin-fetch';
@@ -26,7 +26,24 @@ interface Movement {
   expiration_date?: string | null;
 }
 
+// Wrapper component to handle Suspense for useSearchParams
 export default function AdjustPage() {
+  return (
+    <Suspense fallback={
+      <AdminShell title="Adjust Inventory">
+        <div className={styles.inventoryPage}>
+          <div className={styles.loading}>
+            <div className={styles.spinner} />
+          </div>
+        </div>
+      </AdminShell>
+    }>
+      <AdjustPageContent />
+    </Suspense>
+  );
+}
+
+function AdjustPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const productId = searchParams.get('product');
