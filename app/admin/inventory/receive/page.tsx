@@ -330,7 +330,7 @@ export default function ReceiveItemsPage() {
 
   // Match OCR items to scanned products - uses ALIAS first, then FUZZY
   const matchOcrToProducts = () => {
-    const ocrItemsCopy = ocrItems.map(item => ({ ...item, matched: false, matchedProductId: undefined }));
+    const ocrItemsCopy: ParsedOCRItem[] = ocrItems.map(item => ({ ...item, matched: false }));
     const updatedItems: ScannedItem[] = items.map(item => ({
       ...item,
       matchConfidence: 'none' as const,
