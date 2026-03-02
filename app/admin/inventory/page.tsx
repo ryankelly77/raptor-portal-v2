@@ -419,8 +419,51 @@ export default function InventoryPage() {
     <AdminShell title="Inventory">
       <div className={styles.inventoryPage}>
         {/* Build Version - TEMPORARY */}
-        <div style={{ background: '#fef3c7', color: '#92400e', padding: '8px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px', fontFamily: 'monospace' }}>
-          Build: {BUILD_VERSION}
+        <div style={{ background: '#fef3c7', color: '#92400e', padding: '8px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Build: {BUILD_VERSION}</span>
+          <button
+            onClick={async () => {
+              if (!confirm('⚠️ NUKE ALL INVENTORY DATA?\n\nThis will delete:\n- All inventory movements\n- All purchase items\n- All purchases\n\nProducts will NOT be deleted.\n\nAre you sure?')) {
+                return;
+              }
+              if (!confirm('⚠️ FINAL WARNING!\n\nThis cannot be undone. Type "NUKE" to confirm... just kidding, click OK to proceed.')) {
+                return;
+              }
+              try {
+                // Delete in order: movements -> purchase_items -> purchases
+                const tables = ['inventory_movements', 'inventory_purchase_items', 'inventory_purchases'];
+                for (const table of tables) {
+                  const res = await adminFetch('/api/admin/crud', {
+                    method: 'POST',
+                    body: JSON.stringify({ table, action: 'read' }),
+                  });
+                  const data = await res.json();
+                  for (const item of (data.data || [])) {
+                    await adminFetch('/api/admin/crud', {
+                      method: 'POST',
+                      body: JSON.stringify({ table, action: 'delete', id: item.id }),
+                    });
+                  }
+                }
+                alert('💥 Inventory data nuked! Refreshing...');
+                window.location.reload();
+              } catch (err) {
+                alert('Failed to nuke: ' + (err instanceof Error ? err.message : 'Unknown error'));
+              }
+            }}
+            style={{
+              padding: '4px 12px',
+              background: '#dc2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            ☢️ NUKE INVENTORY
+          </button>
         </div>
 
         {/* Error display */}
