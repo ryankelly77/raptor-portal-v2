@@ -619,10 +619,13 @@ export default function ReceiveItemsPage() {
       }
 
       const purchaseId = purchaseData.data.id;
+      alert(`Step 1: Purchase created (${purchaseId}). Processing ${items.length} items...`);
 
       // 2. Process each item
+      let itemsProcessed = 0;
       for (const item of items) {
         let productId = item.productId;
+        alert(`Processing item ${itemsProcessed + 1}: ${item.name}, productId=${productId || 'NEW'}`);
 
         // Create new product if needed
         if (!productId) {
@@ -710,9 +713,10 @@ export default function ReceiveItemsPage() {
           const movementData = await movementRes.json();
           console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', packageQty, 'pkgs (', totalUnits, 'units)', 'exp:', item.expirationDate);
         }
+        itemsProcessed++;
       }
 
-      alert('Purchase saved successfully!');
+      alert(`Purchase saved! ${itemsProcessed} items processed.`);
       router.push('/admin/inventory');
 
     } catch (err: unknown) {
