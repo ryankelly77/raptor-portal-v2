@@ -589,12 +589,13 @@ export default function InventoryPage() {
             ) : (
               <div>
                 {/* Header */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '8px', padding: '8px 12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 80px', gap: '8px', padding: '8px 12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>
                   <div>Product</div>
                   <div style={{ textAlign: 'right' }}>On-Hand</div>
                   <div style={{ textAlign: 'right' }}>In Machine</div>
                   <div style={{ textAlign: 'right' }}>Unit Cost</div>
                   <div style={{ textAlign: 'right' }}>Earliest Exp</div>
+                  <div style={{ textAlign: 'right' }}>Actions</div>
                 </div>
                 {/* Rows */}
                 {(showAllProducts ? productInventory : productInventory.slice(0, 5)).map((inv) => (
@@ -602,7 +603,7 @@ export default function InventoryPage() {
                     key={inv.product.id}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 80px',
                       gap: '8px',
                       padding: '10px 12px',
                       borderBottom: '1px solid #e5e7eb',
@@ -624,6 +625,23 @@ export default function InventoryPage() {
                       fontWeight: inv.expirationStatus === 'critical' || inv.expirationStatus === 'warning' ? 600 : 400,
                     }}>
                       {inv.earliestExpiration ? formatExpDate(inv.earliestExpiration) : '—'}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <Link
+                        href={`/admin/inventory/adjust?product=${inv.product.id}`}
+                        style={{
+                          padding: '4px 8px',
+                          background: '#f3f4f6',
+                          color: '#374151',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          textDecoration: 'none',
+                          display: 'inline-block',
+                        }}
+                      >
+                        Adjust
+                      </Link>
                     </div>
                   </div>
                 ))}
