@@ -7,7 +7,7 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR01-Q';
+const BUILD_VERSION = 'v2024-MAR02-A';
 
 interface Product {
   id: string;
@@ -92,6 +92,8 @@ export default function InventoryPage() {
       let onHand = 0;
       let available = 0;
 
+      console.log('[Inventory] Processing', movementsList.length, 'movements');
+
       for (const m of movementsList) {
         // Get units per package for this product (default to 1 if not set)
         const product = productsMap.get(m.product_id);
@@ -101,6 +103,7 @@ export default function InventoryPage() {
           case 'purchase_in':
             // Purchases are in packages, convert to units
             onHand += m.quantity * unitsPerPkg;
+            console.log('[Inventory] purchase_in:', m.quantity, 'x', unitsPerPkg, '=', m.quantity * unitsPerPkg, 'total onHand:', onHand);
             break;
           case 'restock_out':
             // Restocking to machine (packages)
@@ -121,6 +124,8 @@ export default function InventoryPage() {
             break;
         }
       }
+
+      console.log('[Inventory] Final stats:', { onHand, available });
 
       setStats({
         totalProducts: productsList.length,

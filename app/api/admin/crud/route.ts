@@ -146,6 +146,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
   products: {
     allowedFields: [
       'barcode', 'name', 'brand', 'category', 'default_price', 'image_url', 'is_active',
+      'units_per_package', 'unit_name', 'package_name',
     ],
     requiredForCreate: ['barcode', 'name', 'category'],
     orderBy: { column: 'name', ascending: true },

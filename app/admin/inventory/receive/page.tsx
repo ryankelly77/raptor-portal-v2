@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR01-Q';
+const BUILD_VERSION = 'v2024-MAR02-A';
 
 interface ErrorInfo {
   message: string;
@@ -594,7 +594,7 @@ export default function ReceiveItemsPage() {
         }
 
         // Create purchase item
-        await adminFetch('/api/admin/crud', {
+        const purchaseItemRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
             table: 'inventory_purchase_items',
@@ -608,8 +608,13 @@ export default function ReceiveItemsPage() {
           }),
         });
 
+        if (!purchaseItemRes.ok) {
+          const errData = await purchaseItemRes.json();
+          console.error('[Receive] Failed to create purchase item:', errData);
+        }
+
         // Create inventory movement
-        await adminFetch('/api/admin/crud', {
+        const movementRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
             table: 'inventory_movements',
@@ -623,6 +628,15 @@ export default function ReceiveItemsPage() {
             },
           }),
         });
+
+        if (!movementRes.ok) {
+          const errData = await movementRes.json();
+          console.error('[Receive] Failed to create movement:', errData);
+          throw new Error(`Failed to create movement: ${errData.error || 'Unknown error'}`);
+        } else {
+          const movementData = await movementRes.json();
+          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', item.quantity);
+        }
       }
 
       alert('Purchase saved successfully!');
