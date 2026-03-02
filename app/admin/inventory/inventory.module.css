@@ -81,15 +81,21 @@
   margin-bottom: 24px;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 480px) {
   .quickActions {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
+@media (min-width: 768px) {
+  .quickActions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (min-width: 1024px) {
   .quickActions {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
   }
 }
 
@@ -97,17 +103,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 16px 20px;
+  gap: 8px;
+  padding: 14px 12px;
   background: #fff;
   border: 2px solid #e5e7eb;
   border-radius: 12px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #374151;
   cursor: pointer;
   transition: all 0.2s;
-  min-height: 56px;
+  min-height: 52px;
+  text-decoration: none;
+}
+
+@media (min-width: 1024px) {
+  .actionButton {
+    padding: 12px 8px;
+    font-size: 13px;
+    gap: 6px;
+  }
 }
 
 .actionButton:hover {
