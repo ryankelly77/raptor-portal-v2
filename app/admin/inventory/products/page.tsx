@@ -14,6 +14,7 @@ interface Product {
   brand: string | null;
   category: 'snack' | 'beverage' | 'meal';
   default_price: number | null;
+  sell_price: number | null;
   image_url: string | null;
   is_active: boolean;
   created_at: string;
@@ -40,6 +41,7 @@ export default function ProductsPage() {
     barcode: '',
     category: 'snack' as 'snack' | 'beverage' | 'meal',
     default_price: '',
+    sell_price: '',
     image_url: '',
     units_per_package: '1',
     unit_name: 'each',
@@ -116,6 +118,7 @@ export default function ProductsPage() {
       barcode: '',
       category: 'snack',
       default_price: '',
+      sell_price: '',
       image_url: '',
       units_per_package: '1',
       unit_name: 'each',
@@ -132,6 +135,7 @@ export default function ProductsPage() {
       barcode: product.barcode,
       category: product.category,
       default_price: product.default_price?.toString() || '',
+      sell_price: product.sell_price?.toString() || '',
       image_url: product.image_url || '',
       units_per_package: (product.units_per_package || 1).toString(),
       unit_name: product.unit_name || 'each',
@@ -154,6 +158,7 @@ export default function ProductsPage() {
         barcode: formData.barcode.trim(),
         category: formData.category,
         default_price: formData.default_price ? parseFloat(formData.default_price) : null,
+        sell_price: formData.sell_price ? parseFloat(formData.sell_price) : null,
         image_url: formData.image_url.trim() || null,
         units_per_package: parseInt(formData.units_per_package) || 1,
         unit_name: formData.unit_name,
@@ -487,17 +492,35 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Default Price</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className={styles.formInput}
-                    value={formData.default_price}
-                    onChange={(e) => setFormData({ ...formData, default_price: e.target.value })}
-                    placeholder="0.00"
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Cost Price (per unit)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={styles.formInput}
+                      value={formData.default_price}
+                      onChange={(e) => setFormData({ ...formData, default_price: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Sell Price (per unit)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={styles.formInput}
+                      value={formData.sell_price}
+                      onChange={(e) => setFormData({ ...formData, sell_price: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
+                {formData.default_price && formData.sell_price && (
+                  <div style={{ fontSize: '12px', color: '#16a34a', background: '#dcfce7', padding: '8px 12px', borderRadius: '6px', marginBottom: '16px' }}>
+                    Margin: ${(parseFloat(formData.sell_price) - parseFloat(formData.default_price)).toFixed(2)} ({Math.round(((parseFloat(formData.sell_price) - parseFloat(formData.default_price)) / parseFloat(formData.sell_price)) * 100)}%)
+                  </div>
+                )}
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Image URL</label>
                   <input

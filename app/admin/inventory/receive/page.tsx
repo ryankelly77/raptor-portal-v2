@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-O';
+const BUILD_VERSION = 'v2024-MAR02-P';
 
 interface ErrorInfo {
   message: string;
@@ -659,6 +659,7 @@ export default function ReceiveItemsPage() {
         console.log('[Receive] Item:', item.name, '| Packages:', packageQty, '| Units/pkg:', unitsPerPkg, '| Total units:', totalUnits, '| Package price:', packagePrice, '| Per-unit cost:', perUnitCost, '| Exp:', item.expirationDate);
 
         // Create purchase item with per-unit cost (store individual units)
+        // Also store original package info for display purposes
         const purchaseItemRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
@@ -667,9 +668,11 @@ export default function ReceiveItemsPage() {
             data: {
               purchase_id: purchaseId,
               product_id: productId,
-              quantity: totalUnits, // Store as individual units
-              unit_cost: perUnitCost, // Store per-unit cost
-              expiration_date: item.expirationDate || null, // Expiration tracking
+              quantity: totalUnits, // Store as individual units (e.g., 6 for a 6-pack)
+              unit_cost: perUnitCost, // Store per-unit cost (e.g., $0.91/cup)
+              expiration_date: item.expirationDate || null,
+              package_qty: packageQty, // Original packages purchased (e.g., 1)
+              package_price: packagePrice, // Price per package (e.g., $5.48)
             },
           }),
         });
@@ -680,8 +683,8 @@ export default function ReceiveItemsPage() {
         }
         const purchaseItemId = purchaseItemData.data?.id || null;
 
-        // Create inventory movement (quantity is in PACKAGES for movements)
-        // The dashboard calculates: packages × units_per_package to get total units
+        // Create inventory movement (quantity is ALWAYS in INDIVIDUAL UNITS)
+        // The machine sells units, not packages - all quantities must be in sellable units
         const movementRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
@@ -689,7 +692,7 @@ export default function ReceiveItemsPage() {
             action: 'create',
             data: {
               product_id: productId,
-              quantity: packageQty, // Store as PACKAGES (dashboard multiplies by units_per_package)
+              quantity: totalUnits, // Store as INDIVIDUAL UNITS (e.g., 6 for a 6-pack)
               movement_type: 'purchase_in',
               moved_by: purchasedBy,
               notes: `Received from ${storeName}${unitsPerPkg > 1 ? ` (${packageQty} pkg × ${unitsPerPkg} = ${totalUnits} units)` : ''}`,

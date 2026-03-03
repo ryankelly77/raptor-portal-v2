@@ -85,31 +85,29 @@ export default function InventoryPage() {
       today.setHours(0, 0, 0, 0);
 
       // Group movements by purchase_item_id
+      // All movements are stored in INDIVIDUAL UNITS (not packages)
       const movementsByPurchaseItem = new Map<string, { restocked: number; discarded: number }>();
       for (const m of movements) {
         if (m.purchase_item_id) {
-          const product = productsMap.get(m.product_id);
-          const unitsPerPkg = product?.units_per_package || 1;
           const existing = movementsByPurchaseItem.get(m.purchase_item_id) || { restocked: 0, discarded: 0 };
 
           if (m.movement_type === 'restock_out') {
-            existing.restocked += Math.abs(m.quantity) * unitsPerPkg;
+            existing.restocked += Math.abs(m.quantity); // Already in units
           } else if (m.movement_type === 'shrinkage') {
-            existing.discarded += Math.abs(m.quantity);
+            existing.discarded += Math.abs(m.quantity); // Already in units
           }
           movementsByPurchaseItem.set(m.purchase_item_id, existing);
         }
       }
 
       // Calculate in-machine from restock_in movements
+      // All movements are stored in INDIVIDUAL UNITS (not packages)
       let totalInMachine = 0;
       for (const m of movements) {
-        const product = productsMap.get(m.product_id);
-        const unitsPerPkg = product?.units_per_package || 1;
         if (m.movement_type === 'restock_in') {
-          totalInMachine += m.quantity * unitsPerPkg;
+          totalInMachine += m.quantity; // Already in units
         } else if (m.movement_type === 'sold') {
-          totalInMachine -= m.quantity;
+          totalInMachine -= m.quantity; // Already in units
         }
       }
 

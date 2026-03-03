@@ -145,7 +145,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
   // Inventory tables
   products: {
     allowedFields: [
-      'barcode', 'name', 'brand', 'category', 'default_price', 'image_url', 'is_active',
+      'barcode', 'name', 'brand', 'category', 'default_price', 'sell_price', 'image_url', 'is_active',
       'units_per_package', 'unit_name', 'package_name',
     ],
     requiredForCreate: ['barcode', 'name', 'category'],
@@ -162,6 +162,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
   inventory_purchase_items: {
     allowedFields: [
       'purchase_id', 'product_id', 'quantity', 'unit_cost', 'expiration_date',
+      'package_qty', 'package_price', // Track original package info
     ],
     requiredForCreate: ['purchase_id', 'product_id'],
     orderBy: { column: 'created_at', ascending: false },

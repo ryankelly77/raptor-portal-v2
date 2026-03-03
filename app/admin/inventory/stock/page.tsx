@@ -12,6 +12,9 @@ interface Product {
   brand?: string | null;
   category: string;
   units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
+  sell_price?: number | null;
 }
 
 interface Purchase {
@@ -118,15 +121,15 @@ export default function StockPage() {
         const purchase = purchasesMap.get(purchaseItem.purchase_id) || null;
         const mvmts = movementsByPurchaseItem.get(purchaseItem.id) || [];
 
-        const unitsPerPkg = product.units_per_package || 1;
+        // All movements are stored in INDIVIDUAL UNITS (not packages)
         let restockedQty = 0;
         let discardedQty = 0;
 
         for (const m of mvmts) {
           if (m.movement_type === 'restock_out') {
-            restockedQty += Math.abs(m.quantity) * unitsPerPkg;
+            restockedQty += Math.abs(m.quantity); // Already in units
           } else if (m.movement_type === 'shrinkage') {
-            discardedQty += Math.abs(m.quantity);
+            discardedQty += Math.abs(m.quantity); // Already in units
           }
         }
 
@@ -373,8 +376,13 @@ export default function StockPage() {
                     </div>
                     <div style={{ textAlign: 'right', marginRight: '12px' }}>
                       <div style={{ fontWeight: 600, color: '#FF580F', fontSize: '16px' }}>{inv.totalOnHand}</div>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>on hand</div>
+                      <div style={{ fontSize: '11px', color: '#6b7280' }}>{inv.product.unit_name || 'units'} on hand</div>
                     </div>
+                    {inv.avgUnitCost && (
+                      <div style={{ textAlign: 'right', marginRight: '12px', fontSize: '12px', color: '#6b7280' }}>
+                        ${inv.avgUnitCost.toFixed(2)}/{inv.product.unit_name || 'unit'}
+                      </div>
+                    )}
                     {inv.earliestExpiration && (
                       <div style={{
                         fontSize: '11px',
@@ -404,11 +412,11 @@ export default function StockPage() {
                               <div style={{ fontWeight: 600, fontSize: '13px' }}>Batch {idx + 1} — {batch.purchase?.store_name || 'Unknown'}</div>
                               <div style={{ fontSize: '12px', color: '#6b7280' }}>Purchased: {formatPurchaseDate(batch.purchaseItem.created_at)}</div>
                               <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                                Qty: <strong>{batch.remainingQty}</strong> of {batch.originalQty}
+                                Remaining: <strong>{batch.remainingQty}</strong> of {batch.originalQty} {batch.product.unit_name || 'units'}
                                 {batch.restockedQty > 0 && <span style={{ color: '#2563eb' }}> ({batch.restockedQty} restocked)</span>}
                                 {batch.discardedQty > 0 && <span style={{ color: '#dc2626' }}> ({batch.discardedQty} discarded)</span>}
                               </div>
-                              <div style={{ fontSize: '12px', color: '#6b7280' }}>Cost: ${batch.unitCost?.toFixed(2) || '—'}/unit</div>
+                              <div style={{ fontSize: '12px', color: '#6b7280' }}>Cost: ${batch.unitCost?.toFixed(2) || '—'}/{batch.product.unit_name || 'unit'}</div>
                             </div>
                             <div style={{ textAlign: 'right' }}>
                               {batch.expirationDate && (
