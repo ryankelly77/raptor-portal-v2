@@ -87,11 +87,12 @@ export default function StockPage() {
       const purchases: Purchase[] = (await purchasesRes.json()).data || [];
       const expSettings = (await expirationRes.json()).data || [];
 
+      type ExpSetting = { category: string; warning_days: number; critical_days: number };
       const productsMap = new Map(products.map(p => [p.id, p]));
       const purchasesMap = new Map(purchases.map(p => [p.id, p]));
-      const expSettingsMap = new Map(expSettings.map((s: { category: string; warning_days: number; critical_days: number }) => [s.category, s]));
+      const expSettingsMap = new Map<string, ExpSetting>(expSettings.map((s: ExpSetting) => [s.category, s]));
 
-      const getExpSettings = (category: string) => expSettingsMap.get(category) || { warning_days: 14, critical_days: 3 };
+      const getExpSettings = (category: string): ExpSetting => expSettingsMap.get(category) || { category, warning_days: 14, critical_days: 3 };
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
