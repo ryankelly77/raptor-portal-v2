@@ -132,6 +132,7 @@ function AdjustPageContent() {
   }, [selectedProduct, movements, products]);
 
   const handleSubmit = async () => {
+    alert(`handleSubmit called: product=${selectedProduct}, qty=${quantity}, type=${adjustmentType}`);
     if (!selectedProduct || !quantity) {
       setError('Please select a product and enter a quantity');
       return;
