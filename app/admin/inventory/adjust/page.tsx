@@ -318,6 +318,48 @@ function AdjustPageContent() {
                   </div>
                 </div>
 
+                {/* Delete Product Button - only show if 0 inventory */}
+                {onHandQty === 0 && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Delete "${selectedProductData.brand ? selectedProductData.brand + ' - ' : ''}${selectedProductData.name}"?\n\nThis cannot be undone.`)) return;
+                      try {
+                        const res = await adminFetch('/api/admin/crud', {
+                          method: 'POST',
+                          body: JSON.stringify({
+                            table: 'products',
+                            action: 'delete',
+                            id: selectedProduct,
+                          }),
+                        });
+                        if (!res.ok) {
+                          const errData = await res.json();
+                          throw new Error(errData.error || 'Failed to delete');
+                        }
+                        setSuccess('Product deleted');
+                        setSelectedProduct('');
+                        loadData();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Failed to delete product');
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      marginBottom: '16px',
+                      background: '#fef2f2',
+                      color: '#dc2626',
+                      border: '2px solid #dc2626',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🗑️ Delete This Product
+                  </button>
+                )}
+
                 {/* Adjustment Type */}
                 <div style={{ marginBottom: '16px' }}>
                   <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '8px' }}>
