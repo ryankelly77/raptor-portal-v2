@@ -422,6 +422,8 @@ export async function POST(request: NextRequest) {
     data?: Record<string, unknown>;
     id?: string;
     filters?: Record<string, unknown>;
+    deleteByField?: string;
+    deleteByValue?: string;
   };
 
   try {
@@ -582,6 +584,21 @@ export async function POST(request: NextRequest) {
       }
 
       case 'delete': {
+        // Support deleteByField for deleting by a field other than id
+        const deleteByField = body.deleteByField;
+        const deleteByValue = body.deleteByValue;
+
+        if (deleteByField && deleteByValue) {
+          // Delete by custom field (e.g., delete all movements for a purchase_item_id)
+          const { error } = await supabase
+            .from(table)
+            .delete()
+            .eq(deleteByField, deleteByValue);
+
+          if (error) throw error;
+          return NextResponse.json({ success: true });
+        }
+
         if (!isValidId(id)) {
           return NextResponse.json({ error: 'Valid ID is required for delete' }, { status: 400 });
         }

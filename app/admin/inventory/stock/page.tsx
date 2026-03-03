@@ -357,7 +357,19 @@ export default function StockPage() {
         if (!inRes.ok) throw new Error((await inRes.json()).error || 'Failed to record in movement');
 
       } else if (actionDestination === 'delete') {
-        // Duplicate: delete the purchase item entirely (it was entered by mistake)
+        // Delete: remove the purchase item entirely (it was entered by mistake)
+        // First delete any movements that reference this purchase item
+        await adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({
+            table: 'inventory_movements',
+            action: 'delete',
+            deleteByField: 'purchase_item_id',
+            deleteByValue: actionBatch.purchaseItem.id,
+          }),
+        });
+
+        // Then delete the purchase item itself
         const res = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
@@ -366,7 +378,7 @@ export default function StockPage() {
             id: actionBatch.purchaseItem.id,
           }),
         });
-        if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete duplicate');
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete');
       } else {
         // Expired or Shrinkage: single shrinkage movement
         const notes = actionDestination === 'expired' ? 'Expired' : 'Shrinkage';
