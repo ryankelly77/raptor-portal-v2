@@ -15,6 +15,7 @@ import {
   deleteProject,
 } from '@/lib/api/admin';
 import type { Project, Phase, Location, Property, PropertyManager } from '@/types/database';
+import { adminFetch } from '@/lib/admin-fetch';
 import { PhaseEditor } from './components/PhaseEditor';
 import { EquipmentManager } from './components/EquipmentManager';
 import { ActivityLogPanel } from './components/ActivityLogPanel';
@@ -658,21 +659,25 @@ export default function ProjectEditorPage() {
                               onClick={async () => {
                                 if (!window.confirm('Send reminder email for this project now?')) return;
                                 try {
-                                  const response = await fetch('/api/cron/send-reminders', {
+                                  const response = await adminFetch('/api/cron/send-reminders', {
                                     method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      'Authorization': 'Bearer ' + sessionStorage.getItem('adminToken'),
-                                    },
                                     body: JSON.stringify({ projectId: project.id, force: true }),
                                   });
                                   const data = await response.json();
                                   if (data.success) {
-                                    alert('Reminder sent successfully!');
+                                    const result = data.results?.[0];
+                                    if (result?.status === 'sent') {
+                                      alert(`Reminder sent to ${result.to}!`);
+                                    } else if (result?.status === 'skipped') {
+                                      alert(`Skipped: ${result.reason}`);
+                                    } else {
+                                      alert('Reminder sent successfully!');
+                                    }
                                   } else {
                                     alert('Error: ' + (data.error || 'Failed to send'));
                                   }
                                 } catch (err) {
+                                  console.error('Send reminder error:', err);
                                   alert('Failed: ' + (err instanceof Error ? err.message : 'Unknown'));
                                 }
                               }}
