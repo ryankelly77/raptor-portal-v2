@@ -102,6 +102,7 @@ export async function adminFetch(url: string, options: RequestInit = {}): Promis
   const response = await fetch(url, {
     ...options,
     headers,
+    cache: 'no-store',
   });
 
   console.log(`[AdminFetch] Response: ${response.status} ${response.statusText}`);
