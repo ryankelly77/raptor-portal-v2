@@ -52,7 +52,7 @@ async function getEmailTemplate(supabase: ReturnType<typeof getAdminClient>, tem
     const { data, error } = await supabase
       .from('email_templates')
       .select('*')
-      .eq('key', templateKey)
+      .eq('template_key', templateKey)
       .single();
 
     if (error && error.code !== 'PGRST116') {
