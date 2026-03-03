@@ -171,6 +171,13 @@ export default function ProjectEditorPage() {
   const [savedProject, setSavedProject] = useState(false);
   const [showPhaseModal, setShowPhaseModal] = useState(false);
 
+  // Date change notification state
+  const [originalEstimatedCompletion, setOriginalEstimatedCompletion] = useState<string | null>(null);
+  const [showDateChangeModal, setShowDateChangeModal] = useState(false);
+  const [dateChangeInfo, setDateChangeInfo] = useState<{ oldDate: string | null; newDate: string } | null>(null);
+  const [dateChangeReason, setDateChangeReason] = useState('');
+  const [sendingDateNotification, setSendingDateNotification] = useState(false);
+
   // Derived data - CORRECT CHAIN: project → location → property → property_manager
   const location = locations.find((l) => l.id === project?.location_id);
   const property = location ? properties.find((p) => p.id === location.property_id) : undefined;
@@ -247,6 +254,9 @@ export default function ProjectEditorPage() {
         email_reminders_enabled: projectData.email_reminders_enabled || false,
         reminder_email: projectData.reminder_email || '',
       });
+
+      // Track original estimated completion for date change notifications
+      setOriginalEstimatedCompletion(projectData.estimated_completion || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load project');
     } finally {
@@ -264,6 +274,12 @@ export default function ProjectEditorPage() {
     if (!project) return;
     setSavingProject(true);
     setSavedProject(false);
+
+    // Check if estimated completion date changed
+    const oldDate = originalEstimatedCompletion;
+    const newDate = projectForm.estimated_completion || null;
+    const dateChanged = oldDate !== newDate && newDate;
+
     try {
       await updateProject(project.id, {
         project_number: projectForm.project_number || null,
@@ -278,6 +294,13 @@ export default function ProjectEditorPage() {
         reminder_email: projectForm.reminder_email || null,
       });
       setSavedProject(true);
+
+      // If date changed, show notification option
+      if (dateChanged && propertyManager?.email) {
+        setDateChangeInfo({ oldDate, newDate: newDate as string });
+        setDateChangeReason('');
+      }
+
       setTimeout(() => {
         setSavedProject(false);
         setEditingProject(false);
@@ -287,6 +310,45 @@ export default function ProjectEditorPage() {
       alert('Error saving project: ' + (err instanceof Error ? err.message : 'Unknown'));
     } finally {
       setSavingProject(false);
+    }
+  }
+
+  async function handleSendDateChangeNotification() {
+    if (!project || !dateChangeInfo || !propertyManager) return;
+
+    const pmEmail = propertyManager.email;
+    const pmName = propertyManager.name;
+    const ccEmails = 'ryan@raptor-vending.com, tracie@raptor-vending.com, cristian@raptor-vending.com';
+
+    setSendingDateNotification(true);
+    try {
+      const response = await adminFetch('/api/notifications/date-change', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: project.id,
+          pm_email: pmEmail,
+          pm_name: pmName,
+          cc_emails: ccEmails,
+          old_date: dateChangeInfo.oldDate,
+          new_date: dateChangeInfo.newDate,
+          reason: dateChangeReason || null,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`✓ Date change notification sent to ${pmName} (${pmEmail})\nCC: ${ccEmails}`);
+        setShowDateChangeModal(false);
+        setDateChangeInfo(null);
+        setDateChangeReason('');
+      } else {
+        alert('Error: ' + (data.error || 'Failed to send notification'));
+      }
+    } catch (err) {
+      console.error('Date change notification error:', err);
+      alert('Failed: ' + (err instanceof Error ? err.message : 'Unknown'));
+    } finally {
+      setSendingDateNotification(false);
     }
   }
 
@@ -810,6 +872,123 @@ export default function ProjectEditorPage() {
           onClose={() => setShowPhaseModal(false)}
           onSave={handleAddPhase}
         />
+      )}
+
+      {/* Date Change Notification Modal */}
+      {showDateChangeModal && dateChangeInfo && propertyManager && (
+        <div className={styles.modalOverlay} onClick={() => setShowDateChangeModal(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Notify PM of Date Change</h3>
+            </div>
+            <div className={styles.modalBody}>
+              <div style={{ marginBottom: '16px', padding: '12px', background: '#f8fafc', borderRadius: '8px' }}>
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>To:</strong> {propertyManager.name} ({propertyManager.email})
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>CC:</strong> ryan@raptor-vending.com, tracie@raptor-vending.com, cristian@raptor-vending.com
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>Property:</strong> {property?.name || 'Unknown'}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px', padding: '16px', background: '#fff7ed', border: '2px solid #FF6B00', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Schedule Change</div>
+                <div>
+                  <span style={{ color: '#999', textDecoration: 'line-through' }}>
+                    {dateChangeInfo.oldDate ? new Date(dateChangeInfo.oldDate).toLocaleDateString() : 'Not set'}
+                  </span>
+                  <span style={{ margin: '0 8px', color: '#666' }}>→</span>
+                  <span style={{ color: '#FF6B00', fontWeight: 'bold' }}>
+                    {new Date(dateChangeInfo.newDate).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Reason for change (optional)</label>
+                <textarea
+                  className={styles.formTextarea}
+                  value={dateChangeReason}
+                  onChange={(e) => setDateChangeReason(e.target.value)}
+                  placeholder="e.g., Waiting on electrical contractor"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <button
+                className={styles.btnSecondary}
+                onClick={() => {
+                  setShowDateChangeModal(false);
+                  setDateChangeInfo(null);
+                  setDateChangeReason('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.btnPrimary}
+                onClick={handleSendDateChangeNotification}
+                disabled={sendingDateNotification}
+              >
+                {sendingDateNotification ? 'Sending...' : 'Send Notification'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date Change Notification Button (shown after save when date changed) */}
+      {dateChangeInfo && propertyManager && !showDateChangeModal && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 1000,
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center',
+          background: '#fff',
+          padding: '12px 16px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          border: '2px solid #FF6B00',
+        }}>
+          <span style={{ fontSize: '14px', color: '#333' }}>Date changed — notify PM?</span>
+          <button
+            onClick={() => setShowDateChangeModal(true)}
+            style={{
+              background: '#FF6B00',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            📧 Notify PM
+          </button>
+          <button
+            onClick={() => setDateChangeInfo(null)}
+            style={{
+              background: '#e5e7eb',
+              color: '#666',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
       )}
     </div>
   );
