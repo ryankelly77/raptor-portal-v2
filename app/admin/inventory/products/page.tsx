@@ -192,10 +192,10 @@ export default function ProductsPage() {
   }
 
   async function handleDelete(product: Product) {
-    if (!confirm(`Delete "${product.brand ? product.brand + ' ' : ''}${product.name}"?`)) return;
+    if (!confirm(`Delete "${product.brand ? product.brand + ' ' : ''}${product.name}"?\n\nThis will fail if the product has inventory or movements.`)) return;
 
     try {
-      await adminFetch('/api/admin/crud', {
+      const res = await adminFetch('/api/admin/crud', {
         method: 'POST',
         body: JSON.stringify({
           table: 'products',
@@ -203,11 +203,24 @@ export default function ProductsPage() {
           id: product.id,
         }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Check for foreign key constraint error
+        if (data.error?.includes('foreign key') || data.error?.includes('violates') || data.error?.includes('referenced')) {
+          alert('Cannot delete: This product has inventory records or movements. Remove all inventory first.');
+        } else {
+          alert('Error deleting product: ' + (data.error || 'Unknown error'));
+        }
+        return;
+      }
+
       await loadProducts();
     } catch (err) {
       console.error('Error deleting product:', err);
       if (!(err instanceof AuthError)) {
-        alert('Error deleting product');
+        alert('Error deleting product: ' + (err instanceof Error ? err.message : 'Unknown error'));
       }
     }
   }
