@@ -335,5 +335,170 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Also support POST for manual triggers from admin UI
-export { GET as POST };
+// POST handler for manual triggers from admin UI (reads body instead of query params)
+export async function POST(request: NextRequest) {
+  // Admin auth required for POST
+  const auth = requireAdmin(request);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!MAILGUN_API_KEY) {
+    return NextResponse.json({ error: 'Mailgun API key not configured' }, { status: 500 });
+  }
+
+  // Parse body for POST requests
+  let body: { projectId?: string; force?: boolean } = {};
+  try {
+    body = await request.json();
+  } catch {
+    // Empty body is OK
+  }
+
+  const forceResend = body.force === true;
+  const singleProjectId = body.projectId;
+
+  let supabase: ReturnType<typeof getAdminClient>;
+  try {
+    supabase = getAdminClient();
+  } catch (err) {
+    console.error('Supabase admin client error:', err);
+    return NextResponse.json({ error: 'Database service not configured' }, { status: 500 });
+  }
+
+  try {
+    // Fetch the email template for CC emails
+    const template = await getEmailTemplate(supabase, 'weekly-reminder');
+    const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
+
+    // Fetch projects with reminders enabled
+    let query = supabase
+      .from('projects')
+      .select(`
+        id,
+        public_token,
+        project_number,
+        reminder_email,
+        email_reminders_enabled,
+        last_reminder_sent,
+        location:locations (
+          name,
+          property:properties (
+            name,
+            property_manager:property_managers (
+              name,
+              email
+            )
+          )
+        ),
+        phases (
+          id,
+          phase_number,
+          tasks (
+            id,
+            label,
+            completed,
+            sort_order
+          )
+        )
+      `);
+
+    if (singleProjectId) {
+      query = query.eq('id', singleProjectId);
+    } else {
+      query = query.eq('email_reminders_enabled', true);
+    }
+
+    const { data: projects, error: projectsError } = await query;
+
+    if (projectsError) {
+      throw new Error(`Database error: ${projectsError.message}`);
+    }
+
+    const results: Array<{ project: string; status: string; reason?: string; to?: string; tasks?: number; error?: string }> = [];
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    for (const project of (projects || []) as unknown as Project[]) {
+      const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
+      const pmEmail = project.location?.property?.property_manager?.email;
+      const pmFullName = project.location?.property?.property_manager?.name || '';
+      const firstName = pmFullName.split(' ')[0] || '';
+
+      // Skip if reminded in the last 24 hours (unless force flag is set)
+      if (!forceResend && project.last_reminder_sent && new Date(project.last_reminder_sent) > oneDayAgo) {
+        results.push({ project: propertyName, status: 'skipped', reason: 'Recently reminded' });
+        continue;
+      }
+
+      // Get all PM tasks in order
+      const sortedPhases = (project.phases || []).sort((a, b) => a.phase_number - b.phase_number);
+      const allPmTasks: Task[] = [];
+      for (const phase of sortedPhases) {
+        const sortedTasks = (phase.tasks || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        for (const task of sortedTasks) {
+          if (task.label.startsWith('[PM]') || task.label.startsWith('[PM-TEXT]')) {
+            allPmTasks.push(task);
+          }
+        }
+      }
+
+      const incompleteCount = allPmTasks.filter(t => !t.completed).length;
+
+      // Skip if no incomplete tasks
+      if (incompleteCount === 0) {
+        results.push({ project: propertyName, status: 'skipped', reason: 'No incomplete tasks' });
+        continue;
+      }
+
+      // Determine recipient email
+      const recipientEmail = project.reminder_email || pmEmail;
+      if (!recipientEmail) {
+        results.push({ project: propertyName, status: 'skipped', reason: 'No email address' });
+        continue;
+      }
+
+      // Send the reminder email
+      try {
+        const html = generateReminderEmail(project, allPmTasks, incompleteCount, propertyName, firstName);
+        await sendEmail(
+          recipientEmail,
+          `Reminder: ${incompleteCount} item${incompleteCount !== 1 ? 's' : ''} remaining for ${propertyName}`,
+          html,
+          ccEmails,
+          project.id
+        );
+
+        // Update last_reminder_sent
+        await supabase
+          .from('projects')
+          .update({ last_reminder_sent: now.toISOString() })
+          .eq('id', project.id);
+
+        // Log to activity stream
+        await supabase
+          .from('activity_log')
+          .insert({
+            project_id: project.id,
+            action: 'reminder_sent',
+            description: `Reminder sent to ${recipientEmail} (${incompleteCount} pending item${incompleteCount !== 1 ? 's' : ''})`,
+            actor_type: 'system',
+          });
+
+        results.push({ project: propertyName, status: 'sent', to: recipientEmail, tasks: incompleteCount });
+      } catch (emailError) {
+        console.error(`Failed to send to ${propertyName}:`, emailError instanceof Error ? emailError.message : emailError);
+        results.push({ project: propertyName, status: 'error', error: emailError instanceof Error ? emailError.message : 'Unknown error' });
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      timestamp: now.toISOString(),
+      results,
+    });
+  } catch (error) {
+    console.error('Reminder error:', error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+  }
+}
