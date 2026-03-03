@@ -314,8 +314,8 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      // Determine recipient email
-      const recipientEmail = project.reminder_email || pmEmail;
+      // Determine recipient email - PM email takes priority, override only if no PM
+      const recipientEmail = pmEmail || project.reminder_email;
       if (!recipientEmail) {
         results.push({ project: propertyName, status: 'skipped', reason: 'No email address' });
         continue;
@@ -622,8 +622,8 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Determine recipient email
-      const recipientEmail = project.reminder_email || pmEmail;
+      // Determine recipient email - PM email takes priority, override only if no PM
+      const recipientEmail = pmEmail || project.reminder_email;
       if (!recipientEmail) {
         results.push({ project: propertyName, status: 'skipped', reason: 'No email address' });
         continue;

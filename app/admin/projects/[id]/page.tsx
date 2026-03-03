@@ -736,7 +736,8 @@ export default function ProjectEditorPage() {
                                 // Show full chain for debugging
                                 const pmName = propertyManager?.name || 'Unknown';
                                 const pmEmail = propertyManager?.email;
-                                const recipientEmail = project.reminder_email || pmEmail;
+                                // PRIORITY: PM email from property chain FIRST, only fall back to override if no PM
+                                const recipientEmail = pmEmail || project.reminder_email;
                                 const ccEmails = 'ryan@raptor-vending.com, tracie@raptor-vending.com, cristian@raptor-vending.com';
                                 const propertyName = property?.name || 'Unknown Property';
 
@@ -752,6 +753,7 @@ export default function ProjectEditorPage() {
                                   pmEmail,
                                   reminderEmailOverride: project.reminder_email,
                                   finalRecipient: recipientEmail,
+                                  usingPmEmail: !!pmEmail,
                                 });
 
                                 if (!recipientEmail) {
@@ -759,13 +761,9 @@ export default function ProjectEditorPage() {
                                   return;
                                 }
 
-                                // Show warning if using override email instead of PM email
-                                const usingOverride = project.reminder_email && project.reminder_email !== pmEmail;
-                                const overrideWarning = usingOverride
-                                  ? `\n\n⚠️ OVERRIDE ACTIVE: Using project reminder_email instead of PM email (${pmEmail || 'not set'}). Clear the "Reminder Email" field to use PM's email.`
-                                  : '';
-
-                                const confirmMsg = `Send reminder email?\n\nTo: ${pmName} (${recipientEmail})\nProperty: ${propertyName}\nCC: ${ccEmails}${overrideWarning}\n\nClick OK to send.`;
+                                // Show info about which email is being used
+                                const emailSource = pmEmail ? 'Property Manager' : 'Project Override';
+                                const confirmMsg = `Send reminder email?\n\nTo: ${pmName} (${recipientEmail})\nSource: ${emailSource}\nProperty: ${propertyName}\nCC: ${ccEmails}\n\nClick OK to send.`;
                                 if (!window.confirm(confirmMsg)) return;
 
                                 try {
