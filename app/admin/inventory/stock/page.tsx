@@ -53,6 +53,7 @@ interface ProductWithBatches {
   batches: Batch[];
   totalOnHand: number;
   totalInMachine: number;
+  totalSold: number;
   avgUnitCost: number | null;
   totalValue: number;
   earliestExpiration: string | null;
@@ -67,10 +68,14 @@ export default function StockPage() {
   const [receiptModal, setReceiptModal] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Locations for restocking
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
+
   // Batch action states
-  const [actionBatch, setActionBatch] = useState<{ batch: Batch; action: 'restock' | 'discard' | 'adjust' } | null>(null);
+  const [actionBatch, setActionBatch] = useState<{ batch: Batch; action: 'push_to_machine' | 'discard' | 'adjust' } | null>(null);
   const [actionQty, setActionQty] = useState('');
   const [actionReason, setActionReason] = useState('');
+  const [actionLocation, setActionLocation] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -78,12 +83,13 @@ export default function StockPage() {
       setLoading(true);
       setError(null);
 
-      const [productsRes, movementsRes, purchaseItemsRes, purchasesRes, expirationRes] = await Promise.all([
+      const [productsRes, movementsRes, purchaseItemsRes, purchasesRes, expirationRes, locationsRes] = await Promise.all([
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'products', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'inventory_movements', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'inventory_purchase_items', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'inventory_purchases', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'expiration_settings', action: 'read' }) }),
+        adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'locations', action: 'read' }) }),
       ]);
 
       const products: Product[] = (await productsRes.json()).data || [];
@@ -91,6 +97,8 @@ export default function StockPage() {
       const purchaseItems: PurchaseItem[] = (await purchaseItemsRes.json()).data || [];
       const purchases: Purchase[] = (await purchasesRes.json()).data || [];
       const expSettings = (await expirationRes.json()).data || [];
+      const locationsData = (await locationsRes.json()).data || [];
+      setLocations(locationsData.map((l: { id: string; name: string }) => ({ id: l.id, name: l.name })));
 
       type ExpSetting = { category: string; warning_days: number; critical_days: number };
       const productsMap = new Map(products.map(p => [p.id, p]));
@@ -106,6 +114,8 @@ export default function StockPage() {
       const movementsByPurchaseItem = new Map<string, typeof movements>();
       // Calculate in-machine per product (restock_in - sold)
       const inMachineByProduct = new Map<string, number>();
+      // Track sold units per product
+      const soldByProduct = new Map<string, number>();
 
       for (const m of movements) {
         if (m.purchase_item_id) {
@@ -120,6 +130,9 @@ export default function StockPage() {
           inMachineByProduct.set(m.product_id, currentInMachine + m.quantity);
         } else if (m.movement_type === 'sold') {
           inMachineByProduct.set(m.product_id, currentInMachine - m.quantity);
+          // Track total sold
+          const currentSold = soldByProduct.get(m.product_id) || 0;
+          soldByProduct.set(m.product_id, currentSold + m.quantity);
         }
       }
 
@@ -226,6 +239,7 @@ export default function StockPage() {
           batches,
           totalOnHand,
           totalInMachine: Math.max(0, inMachineByProduct.get(product.id) || 0),
+          totalSold: soldByProduct.get(product.id) || 0,
           avgUnitCost: totalOnHand > 0 ? totalCost / totalOnHand : null,
           totalValue: totalCost,
           earliestExpiration: earliestExp,
@@ -270,37 +284,84 @@ export default function StockPage() {
 
     setActionSaving(true);
     try {
-      let movementType = '';
-      let movementQty = 0;
+      if (actionBatch.action === 'push_to_machine') {
+        // Push to Machine creates TWO movements:
+        // 1. restock_out: removes from on-hand (storage)
+        // 2. restock_in: adds to machine
 
-      switch (actionBatch.action) {
-        case 'restock': movementType = 'restock_out'; movementQty = -qty; break;
-        case 'discard': movementType = 'shrinkage'; movementQty = -qty; break;
-        case 'adjust': movementType = 'adjustment'; movementQty = qty - actionBatch.batch.remainingQty; break;
+        // Movement 1: Out of storage
+        const outRes = await adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({
+            table: 'inventory_movements',
+            action: 'create',
+            data: {
+              product_id: actionBatch.batch.product.id,
+              quantity: -qty, // Negative = leaving storage
+              movement_type: 'restock_out',
+              moved_by: 'Admin',
+              notes: actionReason || 'Pushed to machine',
+              purchase_item_id: actionBatch.batch.purchaseItem.id,
+              expiration_date: actionBatch.batch.expirationDate,
+            },
+          }),
+        });
+        if (!outRes.ok) throw new Error((await outRes.json()).error || 'Failed to record out movement');
+
+        // Movement 2: Into machine (with location)
+        const locationName = locations.find(l => l.id === actionLocation)?.name || 'Machine';
+        const inRes = await adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({
+            table: 'inventory_movements',
+            action: 'create',
+            data: {
+              product_id: actionBatch.batch.product.id,
+              quantity: qty, // Positive = entering machine
+              movement_type: 'restock_in',
+              moved_by: 'Admin',
+              notes: `Pushed to ${locationName}`,
+              purchase_item_id: actionBatch.batch.purchaseItem.id,
+              expiration_date: actionBatch.batch.expirationDate,
+              location_id: actionLocation || null,
+            },
+          }),
+        });
+        if (!inRes.ok) throw new Error((await inRes.json()).error || 'Failed to record in movement');
+
+      } else {
+        // Discard or Adjust: single movement
+        let movementType = '';
+        let movementQty = 0;
+
+        switch (actionBatch.action) {
+          case 'discard': movementType = 'shrinkage'; movementQty = -qty; break;
+          case 'adjust': movementType = 'adjustment'; movementQty = qty - actionBatch.batch.remainingQty; break;
+        }
+
+        const res = await adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({
+            table: 'inventory_movements',
+            action: 'create',
+            data: {
+              product_id: actionBatch.batch.product.id,
+              quantity: movementQty,
+              movement_type: movementType,
+              moved_by: 'Admin',
+              notes: actionReason || `${actionBatch.action} from batch`,
+              purchase_item_id: actionBatch.batch.purchaseItem.id,
+              expiration_date: actionBatch.batch.expirationDate,
+            },
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed');
       }
-
-      const res = await adminFetch('/api/admin/crud', {
-        method: 'POST',
-        body: JSON.stringify({
-          table: 'inventory_movements',
-          action: 'create',
-          data: {
-            product_id: actionBatch.batch.product.id,
-            quantity: movementQty,
-            movement_type: movementType,
-            moved_by: 'Admin',
-            notes: actionReason || `${actionBatch.action} from batch`,
-            purchase_item_id: actionBatch.batch.purchaseItem.id,
-            expiration_date: actionBatch.batch.expirationDate,
-          },
-        }),
-      });
-
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
 
       setActionBatch(null);
       setActionQty('');
       setActionReason('');
+      setActionLocation('');
       loadData();
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown'));
@@ -317,6 +378,13 @@ export default function StockPage() {
     if (days === 0) return 'TODAY';
     if (days === 1) return '1 day';
     return `${days} days`;
+  };
+  const pluralize = (count: number, singular: string) => {
+    // Handle common unit names
+    if (count === 1) return singular;
+    // Add 's' for pluralization, unless already ends in 's'
+    if (singular.endsWith('s')) return singular;
+    return singular + 's';
   };
 
   if (loading) {
@@ -367,10 +435,11 @@ export default function StockPage() {
         ) : (
           <div className={styles.sectionCard}>
             {/* Table Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', borderBottom: '2px solid #e5e7eb', background: '#f9fafb', fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', borderBottom: '2px solid #e5e7eb', background: '#f9fafb', fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
               <div>Product</div>
               <div style={{ textAlign: 'right' }}>On-Hand</div>
               <div style={{ textAlign: 'right' }}>In Machine</div>
+              <div style={{ textAlign: 'right' }}>Sold</div>
               <div style={{ textAlign: 'right' }}>Cost</div>
               <div style={{ textAlign: 'right' }}>Expires</div>
             </div>
@@ -388,7 +457,7 @@ export default function StockPage() {
                   {/* Product Row */}
                   <div
                     onClick={() => toggleExpanded(inv.product.id)}
-                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '8px', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: expandedProducts.has(inv.product.id) ? '#f9fafb' : 'transparent' }}
+                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '8px', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: expandedProducts.has(inv.product.id) ? '#f9fafb' : 'transparent' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ color: '#6b7280', fontSize: '12px' }}>{expandedProducts.has(inv.product.id) ? '▼' : '▶'}</span>
@@ -398,10 +467,13 @@ export default function StockPage() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>
-                      {inv.totalOnHand} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: '12px' }}>{inv.product.unit_name || 'units'}</span>
+                      {inv.totalOnHand} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: '12px' }}>{pluralize(inv.totalOnHand, inv.product.unit_name || 'unit')}</span>
                     </div>
                     <div style={{ textAlign: 'right', color: inv.totalInMachine > 0 ? '#16a34a' : '#9ca3af' }}>
-                      {inv.totalInMachine} <span style={{ color: '#6b7280', fontSize: '12px' }}>{inv.product.unit_name || 'units'}</span>
+                      {inv.totalInMachine} <span style={{ color: '#6b7280', fontSize: '12px' }}>{pluralize(inv.totalInMachine, inv.product.unit_name || 'unit')}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', color: inv.totalSold > 0 ? '#2563eb' : '#9ca3af' }}>
+                      {inv.totalSold} <span style={{ color: '#6b7280', fontSize: '12px' }}>{pluralize(inv.totalSold, inv.product.unit_name || 'unit')}</span>
                     </div>
                     <div style={{ textAlign: 'right', fontSize: '13px' }}>
                       {inv.avgUnitCost ? `$${inv.avgUnitCost.toFixed(2)}/${inv.product.unit_name || 'unit'}` : '—'}
@@ -437,8 +509,8 @@ export default function StockPage() {
                               <div style={{ fontWeight: 600, fontSize: '13px' }}>Batch {idx + 1} — {batch.purchase?.store_name || 'Unknown'}</div>
                               <div style={{ fontSize: '12px', color: '#6b7280' }}>Purchased: {formatPurchaseDate(batch.purchaseItem.created_at)}</div>
                               <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                                Remaining: <strong>{batch.remainingQty}</strong> of {batch.originalQty} {batch.product.unit_name || 'units'}
-                                {batch.restockedQty > 0 && <span style={{ color: '#2563eb' }}> ({batch.restockedQty} restocked)</span>}
+                                Remaining: <strong>{batch.remainingQty}</strong> of {batch.originalQty} {pluralize(batch.originalQty, batch.product.unit_name || 'unit')}
+                                {batch.restockedQty > 0 && <span style={{ color: '#2563eb' }}> ({batch.restockedQty} pushed)</span>}
                                 {batch.discardedQty > 0 && <span style={{ color: '#dc2626' }}> ({batch.discardedQty} discarded)</span>}
                               </div>
                               <div style={{ fontSize: '12px', color: '#6b7280' }}>Cost: ${batch.unitCost?.toFixed(2) || '—'}/{batch.product.unit_name || 'unit'}</div>
@@ -458,8 +530,8 @@ export default function StockPage() {
                           </div>
                           {/* Actions */}
                           <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-                            <button onClick={(e) => { e.stopPropagation(); setActionBatch({ batch, action: 'restock' }); setActionQty(String(batch.remainingQty)); }} style={{ padding: '8px 16px', background: batch.isOldest ? '#FF580F' : '#f3f4f6', color: batch.isOldest ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
-                              Restock ▸
+                            <button onClick={(e) => { e.stopPropagation(); setActionBatch({ batch, action: 'push_to_machine' }); setActionQty(String(batch.remainingQty)); }} style={{ padding: '8px 16px', background: batch.isOldest ? '#FF580F' : '#f3f4f6', color: batch.isOldest ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
+                              Push to Machine ▸
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); setActionBatch({ batch, action: 'discard' }); setActionQty(String(batch.remainingQty)); }} style={{ padding: '8px 16px', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
                               Discard
@@ -480,22 +552,33 @@ export default function StockPage() {
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
             <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', maxWidth: '400px', width: '100%' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: '16px' }}>
-                {actionBatch.action === 'restock' ? 'Restock to Machine' : actionBatch.action === 'discard' ? 'Discard Items' : 'Adjust Count'}
+                {actionBatch.action === 'push_to_machine' ? 'Push to Machine' : actionBatch.action === 'discard' ? 'Discard Items' : 'Adjust Count'}
               </h3>
               <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 16px' }}>
                 {actionBatch.batch.product.brand && <strong>{actionBatch.batch.product.brand} </strong>}{actionBatch.batch.product.name}
                 <br /><span style={{ fontSize: '12px' }}>{actionBatch.batch.remainingQty} available</span>
               </p>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Quantity</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Quantity ({pluralize(2, actionBatch.batch.product.unit_name || 'unit')})</label>
                 <input type="number" value={actionQty} onChange={(e) => setActionQty(e.target.value)} max={actionBatch.batch.remainingQty} min={0} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
               </div>
+              {actionBatch.action === 'push_to_machine' && (
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Location (Machine)</label>
+                  <select value={actionLocation} onChange={(e) => setActionLocation(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
+                    <option value="">Select location...</option>
+                    {locations.map(loc => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Reason</label>
                 <select value={actionReason} onChange={(e) => setActionReason(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
                   <option value="">Select...</option>
                   {actionBatch.action === 'discard' && <><option value="Expired">Expired</option><option value="Damaged">Damaged</option><option value="Lost">Lost</option><option value="Duplicate">Duplicate</option></>}
-                  {actionBatch.action === 'restock' && <><option value="Routine restock">Routine restock</option><option value="Expiring soon">Expiring soon</option></>}
+                  {actionBatch.action === 'push_to_machine' && <><option value="Routine restock">Routine restock</option><option value="Expiring soon">Expiring soon</option></>}
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
