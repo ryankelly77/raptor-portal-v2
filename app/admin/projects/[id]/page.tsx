@@ -174,8 +174,9 @@ export default function ProjectEditorPage() {
   // Derived data
   const location = locations.find((l) => l.id === project?.location_id);
   const property = location ? properties.find((p) => p.id === location.property_id) : undefined;
-  const propertyManager = property
-    ? managers.find((m) => m.id === property.property_manager_id)
+  // Use project's direct property_manager_id, not the property's
+  const propertyManager = project?.property_manager_id
+    ? managers.find((m) => m.id === project.property_manager_id)
     : undefined;
 
   // Redirect to login if not authenticated

@@ -69,6 +69,7 @@ async function getEmailTemplate(supabase: ReturnType<typeof getAdminClient>, tem
 }
 
 async function sendEmail(to: string, subject: string, html: string, ccEmails: string | undefined, projectId: string | null = null): Promise<void> {
+  console.log('[SendEmail] To:', to, 'CC:', ccEmails);
   const form = new URLSearchParams();
   form.append('from', FROM_EMAIL);
   form.append('to', to);
@@ -205,6 +206,7 @@ export async function GET(request: NextRequest) {
     // Fetch the email template for CC emails
     const template = await getEmailTemplate(supabase, 'weekly-reminder');
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
+    console.log('[SendReminders] Template:', template ? 'found' : 'not found', 'CC emails:', ccEmails);
 
     // Fetch all property managers for lookup
     const { data: allPMs } = await supabase
@@ -381,6 +383,7 @@ export async function POST(request: NextRequest) {
     // Fetch the email template for CC emails
     const template = await getEmailTemplate(supabase, 'weekly-reminder');
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
+    console.log('[SendReminders] Template:', template ? 'found' : 'not found', 'CC emails:', ccEmails);
 
     // Fetch all property managers for lookup
     const { data: allPMs } = await supabase
