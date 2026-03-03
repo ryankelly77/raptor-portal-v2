@@ -62,7 +62,8 @@ export default function InventoryPage() {
       const expSettings = expSettingsData.data || [];
 
       // Create maps
-      const productsMap = new Map(products.map((p: { id: string; units_per_package?: number; category: string }) => [p.id, p]));
+      type Product = { id: string; units_per_package?: number; category: string };
+      const productsMap = new Map<string, Product>(products.map((p: Product) => [p.id, p]));
       const expSettingsMap = new Map(expSettings.map((s: { category: string; warning_days: number; critical_days: number }) => [s.category, s]));
 
       const getExpSettings = (category: string) => {
@@ -246,4 +247,3 @@ export default function InventoryPage() {
     </AdminShell>
   );
 }
-// Build O - Mon Mar  2 19:51:35 CST 2026
