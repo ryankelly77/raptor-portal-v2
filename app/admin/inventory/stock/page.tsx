@@ -460,7 +460,7 @@ export default function StockPage() {
               <div style={{ textAlign: 'right' }}>Sold</div>
               <div style={{ textAlign: 'right' }}>Expired</div>
               <div style={{ textAlign: 'right' }}>Shrinkage</div>
-              <div style={{ textAlign: 'right' }}>Cost</div>
+              <div style={{ textAlign: 'right' }}>Unit Cost</div>
               <div style={{ textAlign: 'right' }}>Expires</div>
             </div>
             <div className={styles.sectionBody} style={{ padding: 0 }}>
