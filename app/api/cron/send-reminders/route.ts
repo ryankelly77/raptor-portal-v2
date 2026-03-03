@@ -48,16 +48,21 @@ interface Project {
 }
 
 async function getEmailTemplate(supabase: ReturnType<typeof getAdminClient>, templateKey: string): Promise<EmailTemplate | null> {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('*')
-    .eq('template_key', templateKey)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('email_templates')
+      .select('*')
+      .eq('key', templateKey)
+      .single();
 
-  if (error && error.code !== 'PGRST116') {
-    console.error('Error fetching email template:', error);
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching email template:', error);
+    }
+    return data;
+  } catch (err) {
+    console.error('Exception fetching email template:', err);
+    return null;
   }
-  return data;
 }
 
 async function sendEmail(to: string, subject: string, html: string, ccEmails: string | undefined, projectId: string | null = null): Promise<void> {

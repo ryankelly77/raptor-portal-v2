@@ -86,7 +86,7 @@ const TABLE_CONFIG: Record<string, TableConfig> = {
   },
   email_templates: {
     allowedFields: [
-      'key', 'name', 'subject', 'body', 'description', 'is_active',
+      'key', 'name', 'subject', 'body', 'description', 'is_active', 'cc_emails',
     ],
     requiredForCreate: ['key', 'name'],
     orderBy: { column: 'name', ascending: true },
