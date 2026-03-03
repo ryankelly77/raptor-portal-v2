@@ -15,6 +15,15 @@ interface SummaryStats {
   expiringWarning: number;
 }
 
+interface ExpiringItem {
+  productId: string;
+  productName: string;
+  productBrand: string | null;
+  quantity: number;
+  expirationDate: string;
+  daysUntil: number;
+}
+
 export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +35,7 @@ export default function InventoryPage() {
     expiringCritical: 0,
     expiringWarning: 0,
   });
+  const [expiringItems, setExpiringItems] = useState<ExpiringItem[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -62,7 +72,7 @@ export default function InventoryPage() {
       const expSettings = expSettingsData.data || [];
 
       // Create maps
-      type Product = { id: string; units_per_package?: number; category: string };
+      type Product = { id: string; name: string; brand: string | null; units_per_package?: number; category: string };
       type ExpSetting = { category: string; warning_days: number; critical_days: number };
       const productsMap = new Map<string, Product>(products.map((p: Product) => [p.id, p]));
       const expSettingsMap = new Map<string, ExpSetting>(expSettings.map((s: ExpSetting) => [s.category, s]));
@@ -108,6 +118,7 @@ export default function InventoryPage() {
       let totalValue = 0;
       let expiringCritical = 0;
       let expiringWarning = 0;
+      const expiringSoon: ExpiringItem[] = [];
 
       for (const pi of purchaseItems) {
         const product = productsMap.get(pi.product_id);
@@ -133,9 +144,25 @@ export default function InventoryPage() {
             } else if (daysUntil <= settings.warning_days) {
               expiringWarning++;
             }
+
+            // Track items expiring within 10 days
+            if (daysUntil <= 10) {
+              expiringSoon.push({
+                productId: product.id,
+                productName: product.name,
+                productBrand: product.brand,
+                quantity: remaining,
+                expirationDate: pi.expiration_date,
+                daysUntil,
+              });
+            }
           }
         }
       }
+
+      // Sort by days until expiry (soonest first)
+      expiringSoon.sort((a, b) => a.daysUntil - b.daysUntil);
+      setExpiringItems(expiringSoon);
 
       setStats({
         totalProducts: products.length,
@@ -244,6 +271,53 @@ export default function InventoryPage() {
             Catalog
           </Link>
         </div>
+
+        {/* Expiring Soon Card */}
+        {expiringItems.length > 0 && (
+          <div className={styles.sectionCard} style={{ marginTop: '8px' }}>
+            <div className={styles.sectionHeader} style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca' }}>
+              <h2 className={styles.sectionTitle} style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>⚠️</span> Expiring Soon
+              </h2>
+            </div>
+            <div className={styles.sectionBody} style={{ padding: '0' }}>
+              {expiringItems.map((item, idx) => (
+                <div
+                  key={`${item.productId}-${idx}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    borderBottom: idx < expiringItems.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  }}
+                >
+                  <div>
+                    {item.productBrand && (
+                      <span style={{ color: '#FF580F', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>
+                        {item.productBrand}{' '}
+                      </span>
+                    )}
+                    <span style={{ fontWeight: 500 }}>{item.productName}</span>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                      {item.quantity} units
+                    </div>
+                  </div>
+                  <div style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: item.daysUntil <= 3 ? '#fef2f2' : '#fef3c7',
+                    color: item.daysUntil <= 3 ? '#dc2626' : '#92400e',
+                  }}>
+                    {item.daysUntil <= 0 ? 'EXPIRED' : item.daysUntil === 1 ? '1 day' : `${item.daysUntil} days`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </AdminShell>
   );
