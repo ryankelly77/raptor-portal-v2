@@ -75,10 +75,11 @@ export default function StockPage() {
 
   // Batch action states
   const [actionBatch, setActionBatch] = useState<Batch | null>(null);
-  const [actionDestination, setActionDestination] = useState<'machine' | 'expired' | 'shrinkage' | 'duplicate' | ''>('');
+  const [actionDestination, setActionDestination] = useState<'machine' | 'expired' | 'shrinkage' | 'delete' | ''>('');
   const [actionQty, setActionQty] = useState('');
   const [actionLocation, setActionLocation] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -355,7 +356,7 @@ export default function StockPage() {
         });
         if (!inRes.ok) throw new Error((await inRes.json()).error || 'Failed to record in movement');
 
-      } else if (actionDestination === 'duplicate') {
+      } else if (actionDestination === 'delete') {
         // Duplicate: delete the purchase item entirely (it was entered by mistake)
         const res = await adminFetch('/api/admin/crud', {
           method: 'POST',
@@ -392,6 +393,7 @@ export default function StockPage() {
       setActionDestination('');
       setActionQty('');
       setActionLocation('');
+      setDeleteConfirm(false);
       loadData();
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown'));
@@ -593,12 +595,12 @@ export default function StockPage() {
               </p>
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Destination</label>
-                <select value={actionDestination} onChange={(e) => setActionDestination(e.target.value as 'machine' | 'expired' | 'shrinkage' | 'duplicate' | '')} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
+                <select value={actionDestination} onChange={(e) => { setActionDestination(e.target.value as 'machine' | 'expired' | 'shrinkage' | 'delete' | ''); setDeleteConfirm(false); }} style={{ width: '100%', padding: '12px', border: actionDestination === 'delete' ? '2px solid #dc2626' : '1px solid #d1d5db', borderRadius: '6px', color: actionDestination === 'delete' ? '#dc2626' : 'inherit', fontWeight: actionDestination === 'delete' ? 600 : 400 }}>
                   <option value="">Select destination...</option>
                   <option value="machine">Machine</option>
                   <option value="expired">Expired</option>
                   <option value="shrinkage">Shrinkage</option>
-                  <option value="duplicate">Duplicate (delete entry)</option>
+                  <option value="delete" style={{ color: '#dc2626' }}>DELETE</option>
                 </select>
               </div>
               {actionDestination === 'machine' && (
@@ -612,14 +614,27 @@ export default function StockPage() {
                   </select>
                 </div>
               )}
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Quantity ({pluralize(2, actionBatch.product.unit_name || 'unit')})</label>
-                <input type="number" value={actionQty} onChange={(e) => setActionQty(e.target.value)} max={actionBatch.remainingQty} min={1} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
-              </div>
+              {actionDestination !== 'delete' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Quantity ({pluralize(2, actionBatch.product.unit_name || 'unit')})</label>
+                  <input type="number" value={actionQty} onChange={(e) => setActionQty(e.target.value)} max={actionBatch.remainingQty} min={1} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
+                </div>
+              )}
+              {actionDestination === 'delete' && (
+                <div style={{ marginBottom: '16px', padding: '12px', background: '#fef2f2', border: '2px solid #dc2626', borderRadius: '8px' }}>
+                  <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#dc2626', fontWeight: 600 }}>
+                    ⚠️ This will permanently delete this batch from inventory. This cannot be undone.
+                  </p>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>Yes, I want to delete this batch</span>
+                  </label>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => { setActionBatch(null); setActionQty(''); setActionDestination(''); setActionLocation(''); }} style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handleBatchAction} disabled={actionSaving || !actionQty || !actionDestination || (actionDestination === 'machine' && !actionLocation)} style={{ flex: 1, padding: '12px', background: actionDestination === 'expired' || actionDestination === 'shrinkage' || actionDestination === 'duplicate' ? '#dc2626' : '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: actionSaving ? 'wait' : 'pointer' }}>
-                  {actionSaving ? 'Saving...' : 'Confirm'}
+                <button onClick={() => { setActionBatch(null); setActionQty(''); setActionDestination(''); setActionLocation(''); setDeleteConfirm(false); }} style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleBatchAction} disabled={actionSaving || (actionDestination !== 'delete' && !actionQty) || !actionDestination || (actionDestination === 'machine' && !actionLocation) || (actionDestination === 'delete' && !deleteConfirm)} style={{ flex: 1, padding: '12px', background: actionDestination === 'expired' || actionDestination === 'shrinkage' || actionDestination === 'delete' ? '#dc2626' : '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: actionSaving ? 'wait' : 'pointer', opacity: (actionDestination === 'delete' && !deleteConfirm) ? 0.5 : 1 }}>
+                  {actionSaving ? 'Saving...' : actionDestination === 'delete' ? 'DELETE' : 'Confirm'}
                 </button>
               </div>
             </div>
