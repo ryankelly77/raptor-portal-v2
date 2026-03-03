@@ -34,14 +34,15 @@ interface Project {
   reminder_email: string | null;
   email_reminders_enabled: boolean;
   last_reminder_sent: string | null;
+  // Direct property manager assigned to the project
+  property_manager: {
+    name: string;
+    email: string;
+  } | null;
   location: {
     name: string;
     property: {
       name: string;
-      property_manager: {
-        name: string;
-        email: string;
-      } | null;
     } | null;
   } | null;
   phases: Phase[];
@@ -204,6 +205,7 @@ export async function GET(request: NextRequest) {
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
 
     // Fetch projects with reminders enabled
+    // Note: property_manager is fetched directly from project.property_manager_id
     let query = supabase
       .from('projects')
       .select(`
@@ -213,14 +215,14 @@ export async function GET(request: NextRequest) {
         reminder_email,
         email_reminders_enabled,
         last_reminder_sent,
+        property_manager:property_managers (
+          name,
+          email
+        ),
         location:locations (
           name,
           property:properties (
-            name,
-            property_manager:property_managers (
-              name,
-              email
-            )
+            name
           )
         ),
         phases (
@@ -253,8 +255,9 @@ export async function GET(request: NextRequest) {
 
     for (const project of (projects || []) as unknown as Project[]) {
       const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
-      const pmEmail = project.location?.property?.property_manager?.email;
-      const pmFullName = project.location?.property?.property_manager?.name || '';
+      // Use property manager directly assigned to the project
+      const pmEmail = project.property_manager?.email;
+      const pmFullName = project.property_manager?.name || '';
       const firstName = pmFullName.split(' ')[0] || '';
 
       // Skip if reminded in the last 24 hours (unless force flag is set)
@@ -372,6 +375,7 @@ export async function POST(request: NextRequest) {
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
 
     // Fetch projects with reminders enabled
+    // Note: property_manager is fetched directly from project.property_manager_id
     let query = supabase
       .from('projects')
       .select(`
@@ -381,14 +385,14 @@ export async function POST(request: NextRequest) {
         reminder_email,
         email_reminders_enabled,
         last_reminder_sent,
+        property_manager:property_managers (
+          name,
+          email
+        ),
         location:locations (
           name,
           property:properties (
-            name,
-            property_manager:property_managers (
-              name,
-              email
-            )
+            name
           )
         ),
         phases (
@@ -421,8 +425,9 @@ export async function POST(request: NextRequest) {
 
     for (const project of (projects || []) as unknown as Project[]) {
       const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
-      const pmEmail = project.location?.property?.property_manager?.email;
-      const pmFullName = project.location?.property?.property_manager?.name || '';
+      // Use property manager directly assigned to the project
+      const pmEmail = project.property_manager?.email;
+      const pmFullName = project.property_manager?.name || '';
       const firstName = pmFullName.split(' ')[0] || '';
 
       // Skip if reminded in the last 24 hours (unless force flag is set)
