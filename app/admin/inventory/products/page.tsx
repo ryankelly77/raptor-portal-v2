@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { AdminShell } from '../../components/AdminShell';
 import { BrandNormalizer } from '../components/BrandNormalizer';
 import { adminFetch, AuthError } from '@/lib/admin-fetch';
@@ -238,6 +239,10 @@ export default function ProductsPage() {
   return (
     <AdminShell title="Product Catalog">
       <div className={styles.inventoryPage}>
+        <Link href="/admin/inventory" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#6b7280', fontSize: '14px', marginBottom: '16px', textDecoration: 'none' }}>
+          ← Back to Inventory
+        </Link>
+
         {/* Header */}
         <div className={styles.pageHeader}>
           <div className={styles.searchBar}>

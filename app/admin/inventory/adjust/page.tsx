@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { AdminShell } from '../../components/AdminShell';
 import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
@@ -270,6 +271,10 @@ function AdjustPageContent() {
   return (
     <AdminShell title="Adjust Inventory">
       <div className={styles.inventoryPage}>
+        <Link href="/admin/inventory" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#6b7280', fontSize: '14px', marginBottom: '16px', textDecoration: 'none' }}>
+          ← Back to Inventory
+        </Link>
+
         {/* Error/Success Messages */}
         {error && (
           <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>

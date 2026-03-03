@@ -61,6 +61,7 @@ export default function StockPage() {
   const [productInventory, setProductInventory] = useState<ProductWithBatches[]>([]);
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [receiptModal, setReceiptModal] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Batch action states
   const [actionBatch, setActionBatch] = useState<{ batch: Batch; action: 'restock' | 'discard' | 'adjust' } | null>(null);
@@ -319,16 +320,46 @@ export default function StockPage() {
           ← Back to Inventory
         </Link>
 
+        {/* Search Bar */}
+        <div style={{ marginBottom: '16px' }}>
+          <input
+            type="text"
+            placeholder="Search products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={styles.searchInput}
+            style={{ width: '100%', maxWidth: '400px' }}
+          />
+        </div>
+
         {error && (
           <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>{error}</div>
         )}
 
-        {productInventory.length === 0 ? (
-          <div className={styles.emptyState}><p>No inventory on hand. Start by receiving items.</p></div>
+        {productInventory.filter(inv => {
+          if (!searchQuery.trim()) return true;
+          const q = searchQuery.toLowerCase();
+          return (
+            inv.product.name.toLowerCase().includes(q) ||
+            (inv.product.brand?.toLowerCase().includes(q)) ||
+            inv.product.category.toLowerCase().includes(q)
+          );
+        }).length === 0 ? (
+          <div className={styles.emptyState}>
+            <p>{searchQuery.trim() ? 'No products match your search.' : 'No inventory on hand. Start by receiving items.'}</p>
+          </div>
         ) : (
           <div className={styles.sectionCard}>
             <div className={styles.sectionBody}>
-              {productInventory.map((inv) => (
+              {productInventory.filter(inv => {
+                if (!searchQuery.trim()) return true;
+                const q = searchQuery.toLowerCase();
+                return (
+                  inv.product.name.toLowerCase().includes(q) ||
+                  (inv.product.brand?.toLowerCase().includes(q)) ||
+                  inv.product.category.toLowerCase().includes(q)
+                );
+              }).map((inv) => (
                 <div key={inv.product.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   {/* Product Row */}
                   <div
