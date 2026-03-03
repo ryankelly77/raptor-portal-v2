@@ -430,7 +430,7 @@ export default function StockPage() {
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Reason</label>
                 <select value={actionReason} onChange={(e) => setActionReason(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
                   <option value="">Select...</option>
-                  {actionBatch.action === 'discard' && <><option value="Expired">Expired</option><option value="Damaged">Damaged</option><option value="Lost">Lost</option></>}
+                  {actionBatch.action === 'discard' && <><option value="Expired">Expired</option><option value="Damaged">Damaged</option><option value="Lost">Lost</option><option value="Duplicate">Duplicate</option></>}
                   {actionBatch.action === 'restock' && <><option value="Routine restock">Routine restock</option><option value="Expiring soon">Expiring soon</option></>}
                 </select>
               </div>
