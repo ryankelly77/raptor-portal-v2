@@ -7,7 +7,7 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR02-L';
+const BUILD_VERSION = 'v2024-MAR02-M';
 
 interface Product {
   id: string;
@@ -755,7 +755,7 @@ export default function InventoryPage() {
                               background: getCategoryColor(inv.product.category).bg,
                               color: getCategoryColor(inv.product.category).color,
                             }}>
-                              {inv.product.category.slice(0, 4).toUpperCase()}
+                              {inv.product.category}
                             </span>
                           </div>
                           <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>{inv.totalOnHand}</div>
