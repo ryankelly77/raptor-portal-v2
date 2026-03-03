@@ -759,7 +759,13 @@ export default function ProjectEditorPage() {
                                   return;
                                 }
 
-                                const confirmMsg = `Send reminder email?\n\nTo: ${pmName} (${recipientEmail})\nProperty: ${propertyName}\nCC: ${ccEmails}\n\nClick OK to send.`;
+                                // Show warning if using override email instead of PM email
+                                const usingOverride = project.reminder_email && project.reminder_email !== pmEmail;
+                                const overrideWarning = usingOverride
+                                  ? `\n\n⚠️ OVERRIDE ACTIVE: Using project reminder_email instead of PM email (${pmEmail || 'not set'}). Clear the "Reminder Email" field to use PM's email.`
+                                  : '';
+
+                                const confirmMsg = `Send reminder email?\n\nTo: ${pmName} (${recipientEmail})\nProperty: ${propertyName}\nCC: ${ccEmails}${overrideWarning}\n\nClick OK to send.`;
                                 if (!window.confirm(confirmMsg)) return;
 
                                 try {
