@@ -81,6 +81,13 @@ export default function StockPage() {
   const [actionSaving, setActionSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
+  // Edit batch states
+  const [editBatch, setEditBatch] = useState<Batch | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editExpDate, setEditExpDate] = useState('');
+  const [editUnitCost, setEditUnitCost] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -414,6 +421,54 @@ export default function StockPage() {
     }
   };
 
+  const openEditBatch = (batch: Batch) => {
+    setEditBatch(batch);
+    // Format date for input (YYYY-MM-DD)
+    const createdDate = new Date(batch.purchaseItem.created_at);
+    setEditDate(createdDate.toISOString().split('T')[0]);
+    setEditExpDate(batch.expirationDate ? batch.expirationDate.split('T')[0] : '');
+    setEditUnitCost(batch.unitCost?.toString() || '');
+  };
+
+  const handleEditBatch = async () => {
+    if (!editBatch) return;
+
+    setEditSaving(true);
+    try {
+      const updateData: Record<string, unknown> = {};
+
+      if (editDate) {
+        updateData.created_at = new Date(editDate).toISOString();
+      }
+      if (editExpDate) {
+        updateData.expiration_date = editExpDate;
+      } else {
+        updateData.expiration_date = null;
+      }
+      if (editUnitCost) {
+        updateData.unit_cost = parseFloat(editUnitCost);
+      }
+
+      const res = await adminFetch('/api/admin/crud', {
+        method: 'POST',
+        body: JSON.stringify({
+          table: 'inventory_purchase_items',
+          action: 'update',
+          id: editBatch.purchaseItem.id,
+          data: updateData,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to update');
+
+      setEditBatch(null);
+      loadData();
+    } catch (err) {
+      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown'));
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const formatExpDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const formatPurchaseDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const getDaysLabel = (days: number | null) => {
@@ -585,6 +640,9 @@ export default function StockPage() {
                             <button onClick={(e) => { e.stopPropagation(); setActionBatch(batch); setActionQty(String(batch.remainingQty)); setActionDestination(''); }} style={{ padding: '8px 16px', background: batch.isOldest ? '#FF580F' : '#f3f4f6', color: batch.isOldest ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
                               Move ▸
                             </button>
+                            <button onClick={(e) => { e.stopPropagation(); openEditBatch(batch); }} style={{ padding: '8px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                              Edit
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -647,6 +705,36 @@ export default function StockPage() {
                 <button onClick={() => { setActionBatch(null); setActionQty(''); setActionDestination(''); setActionLocation(''); setDeleteConfirm(false); }} style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
                 <button onClick={handleBatchAction} disabled={actionSaving || (actionDestination !== 'delete' && !actionQty) || !actionDestination || (actionDestination === 'machine' && !actionLocation) || (actionDestination === 'delete' && !deleteConfirm)} style={{ flex: 1, padding: '12px', background: actionDestination === 'expired' || actionDestination === 'shrinkage' || actionDestination === 'delete' ? '#dc2626' : '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: actionSaving ? 'wait' : 'pointer', opacity: (actionDestination === 'delete' && !deleteConfirm) ? 0.5 : 1 }}>
                   {actionSaving ? 'Saving...' : actionDestination === 'delete' ? 'DELETE' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Batch Modal */}
+        {editBatch && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', maxWidth: '400px', width: '100%' }}>
+              <h3 style={{ margin: '0 0 16px', fontSize: '16px' }}>Edit Batch</h3>
+              <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 16px' }}>
+                {editBatch.product.brand && <strong>{editBatch.product.brand} </strong>}{editBatch.product.name}
+              </p>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Received Date</label>
+                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Expiration Date</label>
+                <input type="date" value={editExpDate} onChange={(e) => setEditExpDate(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Unit Cost ($)</label>
+                <input type="number" step="0.01" value={editUnitCost} onChange={(e) => setEditUnitCost(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setEditBatch(null)} style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleEditBatch} disabled={editSaving} style={{ flex: 1, padding: '12px', background: '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: editSaving ? 'wait' : 'pointer' }}>
+                  {editSaving ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </div>
