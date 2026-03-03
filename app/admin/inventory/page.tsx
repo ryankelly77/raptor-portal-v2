@@ -63,11 +63,12 @@ export default function InventoryPage() {
 
       // Create maps
       type Product = { id: string; units_per_package?: number; category: string };
+      type ExpSetting = { category: string; warning_days: number; critical_days: number };
       const productsMap = new Map<string, Product>(products.map((p: Product) => [p.id, p]));
-      const expSettingsMap = new Map(expSettings.map((s: { category: string; warning_days: number; critical_days: number }) => [s.category, s]));
+      const expSettingsMap = new Map<string, ExpSetting>(expSettings.map((s: ExpSetting) => [s.category, s]));
 
-      const getExpSettings = (category: string) => {
-        return expSettingsMap.get(category) || { warning_days: 14, critical_days: 3 };
+      const getExpSettings = (category: string): ExpSetting => {
+        return expSettingsMap.get(category) || { category, warning_days: 14, critical_days: 3 };
       };
 
       const today = new Date();
