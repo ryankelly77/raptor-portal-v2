@@ -65,12 +65,15 @@ function AdjustPageContent() {
   // Calculate on-hand qty for selected product
   const [onHandQty, setOnHandQty] = useState(0);
 
+  // Purchase items for FIFO calculation
+  const [purchaseItems, setPurchaseItems] = useState<{ id: string; product_id: string; quantity: number }[]>([]);
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [productsRes, movementsRes] = await Promise.all([
+      const [productsRes, movementsRes, purchaseItemsRes] = await Promise.all([
         adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({ table: 'products', action: 'read' }),
@@ -79,13 +82,19 @@ function AdjustPageContent() {
           method: 'POST',
           body: JSON.stringify({ table: 'inventory_movements', action: 'read' }),
         }),
+        adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({ table: 'inventory_purchase_items', action: 'read' }),
+        }),
       ]);
 
       const productsData = await productsRes.json();
       const movementsData = await movementsRes.json();
+      const purchaseItemsData = await purchaseItemsRes.json();
 
       setProducts(productsData.data || []);
       setMovements(movementsData.data || []);
+      setPurchaseItems(purchaseItemsData.data || []);
     } catch (err) {
       if (!(err instanceof AuthError)) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -99,7 +108,7 @@ function AdjustPageContent() {
     loadData();
   }, [loadData]);
 
-  // Calculate on-hand when product changes
+  // Calculate on-hand when product changes (FIFO: from purchase_items minus outbound movements)
   useEffect(() => {
     if (!selectedProduct) {
       setOnHandQty(0);
@@ -109,30 +118,33 @@ function AdjustPageContent() {
     const product = products.find(p => p.id === selectedProduct);
     const unitsPerPkg = product?.units_per_package || 1;
 
-    let qty = 0;
+    // Sum all purchase items for this product (these are in units)
+    let totalReceived = 0;
+    for (const pi of purchaseItems) {
+      if (pi.product_id === selectedProduct) {
+        totalReceived += pi.quantity;
+      }
+    }
+
+    // Subtract outbound movements
+    let totalOut = 0;
     for (const m of movements) {
       if (m.product_id !== selectedProduct) continue;
 
       switch (m.movement_type) {
-        case 'purchase_in':
-          qty += m.quantity * unitsPerPkg;
-          break;
         case 'restock_out':
-          qty -= m.quantity * unitsPerPkg;
-          break;
-        case 'adjustment':
-          qty += m.quantity; // Adjustments are in units
+          totalOut += Math.abs(m.quantity) * unitsPerPkg;
           break;
         case 'shrinkage':
-          qty -= m.quantity;
+          totalOut += Math.abs(m.quantity);
           break;
       }
     }
-    setOnHandQty(Math.max(0, qty));
-  }, [selectedProduct, movements, products]);
+
+    setOnHandQty(Math.max(0, totalReceived - totalOut));
+  }, [selectedProduct, movements, products, purchaseItems]);
 
   const handleSubmit = async () => {
-    alert(`handleSubmit called: product=${selectedProduct}, qty=${quantity}, type=${adjustmentType}`);
     if (!selectedProduct || !quantity) {
       setError('Please select a product and enter a quantity');
       return;
