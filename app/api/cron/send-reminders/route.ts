@@ -379,7 +379,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Parse body for POST requests
-  let body: { projectId?: string; force?: boolean } = {};
+  let body: { projectId?: string; force?: boolean; pm_email?: string; pm_name?: string; cc_emails?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -388,6 +388,11 @@ export async function POST(request: NextRequest) {
 
   const forceResend = body.force === true;
   const singleProjectId = body.projectId;
+
+  // Client-provided PM details (verified by admin in confirmation dialog)
+  const clientProvidedPmEmail = body.pm_email;
+  const clientProvidedPmName = body.pm_name;
+  const clientProvidedCcEmails = body.cc_emails;
 
   let supabase: ReturnType<typeof getAdminClient>;
   try {
@@ -398,11 +403,122 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Fetch the email template for CC emails
-    const template = await getEmailTemplate(supabase, 'weekly-reminder');
-    const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
-    console.log('[SendReminders] Template:', template ? 'found' : 'not found', 'CC emails:', ccEmails);
+    // Use client-provided CC emails if available, otherwise fetch from template
+    let ccEmails: string;
+    if (clientProvidedCcEmails) {
+      ccEmails = clientProvidedCcEmails;
+      console.log('[SendReminders POST] Using client-provided CC emails:', ccEmails);
+    } else {
+      const template = await getEmailTemplate(supabase, 'weekly-reminder');
+      ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
+      console.log('[SendReminders POST] Template:', template ? 'found' : 'not found', 'CC emails:', ccEmails);
+    }
 
+    // If client provided PM email, use it directly (admin verified in confirmation dialog)
+    if (clientProvidedPmEmail && singleProjectId) {
+      console.log('[SendReminders POST] Using client-provided PM:', {
+        pm_email: clientProvidedPmEmail,
+        pm_name: clientProvidedPmName,
+        cc_emails: ccEmails,
+      });
+
+      // Fetch just the project data for email content (not PM lookup)
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          public_token,
+          project_number,
+          location:locations (
+            name,
+            property:properties (
+              name
+            )
+          ),
+          phases (
+            id,
+            phase_number,
+            tasks (
+              id,
+              label,
+              completed,
+              sort_order
+            )
+          )
+        `)
+        .eq('id', singleProjectId)
+        .single();
+
+      if (projectError || !projectData) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      }
+
+      const project = projectData as unknown as Project;
+      const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
+      const firstName = (clientProvidedPmName || '').split(' ')[0] || '';
+
+      // Get all PM tasks
+      const sortedPhases = (project.phases || []).sort((a, b) => a.phase_number - b.phase_number);
+      const allPmTasks: Task[] = [];
+      for (const phase of sortedPhases) {
+        const sortedTasks = (phase.tasks || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        for (const task of sortedTasks) {
+          if (task.label.startsWith('[PM]') || task.label.startsWith('[PM-TEXT]')) {
+            allPmTasks.push(task);
+          }
+        }
+      }
+
+      const incompleteCount = allPmTasks.filter(t => !t.completed).length;
+      if (incompleteCount === 0) {
+        return NextResponse.json({
+          success: true,
+          results: [{ project: propertyName, status: 'skipped', reason: 'No incomplete tasks' }],
+        });
+      }
+
+      // Send to client-provided email
+      const html = generateReminderEmail(project, allPmTasks, incompleteCount, propertyName, firstName);
+      await sendEmail(
+        clientProvidedPmEmail,
+        `Reminder: ${incompleteCount} item${incompleteCount !== 1 ? 's' : ''} remaining for ${propertyName}`,
+        html,
+        ccEmails,
+        project.id
+      );
+
+      // Update last_reminder_sent
+      const now = new Date();
+      await supabase
+        .from('projects')
+        .update({ last_reminder_sent: now.toISOString() })
+        .eq('id', project.id);
+
+      // Log to activity stream
+      await supabase
+        .from('activity_log')
+        .insert({
+          project_id: project.id,
+          action: 'reminder_sent',
+          description: `Reminder sent to ${clientProvidedPmName} (${clientProvidedPmEmail}) - ${incompleteCount} pending item${incompleteCount !== 1 ? 's' : ''}`,
+          actor_type: 'system',
+        });
+
+      return NextResponse.json({
+        success: true,
+        timestamp: now.toISOString(),
+        results: [{
+          project: propertyName,
+          status: 'sent',
+          to: clientProvidedPmEmail,
+          cc: ccEmails,
+          pmName: clientProvidedPmName,
+          tasks: incompleteCount,
+        }],
+      });
+    }
+
+    // Fallback: server-side PM lookup (for bulk/cron sends)
     // Fetch projects with FULL CHAIN: project → location → property → property_manager
     let query = supabase
       .from('projects')

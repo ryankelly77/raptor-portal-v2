@@ -701,15 +701,22 @@ export default function ProjectEditorPage() {
                                 if (!window.confirm(confirmMsg)) return;
 
                                 try {
+                                  // Pass verified PM details to server - don't let server re-lookup
                                   const response = await adminFetch('/api/cron/send-reminders', {
                                     method: 'POST',
-                                    body: JSON.stringify({ projectId: project.id, force: true }),
+                                    body: JSON.stringify({
+                                      projectId: project.id,
+                                      force: true,
+                                      pm_email: recipientEmail,
+                                      pm_name: pmName,
+                                      cc_emails: ccEmails,
+                                    }),
                                   });
                                   const data = await response.json();
                                   if (data.success) {
                                     const result = data.results?.[0];
                                     if (result?.status === 'sent') {
-                                      alert(`Reminder sent to ${result.to}!`);
+                                      alert(`✓ Reminder sent to ${result.pmName || 'PM'} (${result.to})\nCC: ${result.cc || 'none'}`);
                                     } else if (result?.status === 'skipped') {
                                       alert(`Skipped: ${result.reason}`);
                                     } else {
