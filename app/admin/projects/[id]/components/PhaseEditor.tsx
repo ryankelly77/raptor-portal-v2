@@ -265,13 +265,24 @@ export function PhaseEditor({ phase, phaseNumber, projectId, surveyData, onRefre
         <div className={styles.phaseContent}>
           {/* Phase Form */}
           <div className={styles.phaseForm}>
-            <div className={styles.formRow}>
+            <div className={`${styles.formRow} ${styles.twoCol}`}>
               <input
                 className={styles.formInput}
                 placeholder="Title"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
+                style={{ flex: 2 }}
               />
+              <select
+                className={styles.formInput}
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as Phase['status'] })}
+                style={{ flex: 1 }}
+              >
+                <option value="pending">Pending</option>
+                <option value="in-progress">In Progress</option>
+                <option value="completed">Completed</option>
+              </select>
             </div>
             <div className={`${styles.formRow} ${styles.twoCol}`}>
               <div className={styles.formGroup}>
