@@ -52,6 +52,7 @@ interface ProductWithBatches {
   product: Product;
   batches: Batch[];
   totalOnHand: number;
+  totalInMachine: number;
   avgUnitCost: number | null;
   totalValue: number;
   earliestExpiration: string | null;
@@ -103,11 +104,22 @@ export default function StockPage() {
 
       // Group movements by purchase_item_id
       const movementsByPurchaseItem = new Map<string, typeof movements>();
+      // Calculate in-machine per product (restock_in - sold)
+      const inMachineByProduct = new Map<string, number>();
+
       for (const m of movements) {
         if (m.purchase_item_id) {
           const existing = movementsByPurchaseItem.get(m.purchase_item_id) || [];
           existing.push(m);
           movementsByPurchaseItem.set(m.purchase_item_id, existing);
+        }
+
+        // Track in-machine quantities
+        const currentInMachine = inMachineByProduct.get(m.product_id) || 0;
+        if (m.movement_type === 'restock_in') {
+          inMachineByProduct.set(m.product_id, currentInMachine + m.quantity);
+        } else if (m.movement_type === 'sold') {
+          inMachineByProduct.set(m.product_id, currentInMachine - m.quantity);
         }
       }
 
@@ -213,6 +225,7 @@ export default function StockPage() {
           product,
           batches,
           totalOnHand,
+          totalInMachine: Math.max(0, inMachineByProduct.get(product.id) || 0),
           avgUnitCost: totalOnHand > 0 ? totalCost / totalOnHand : null,
           totalValue: totalCost,
           earliestExpiration: earliestExp,
@@ -353,7 +366,15 @@ export default function StockPage() {
           </div>
         ) : (
           <div className={styles.sectionCard}>
-            <div className={styles.sectionBody}>
+            {/* Table Header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', borderBottom: '2px solid #e5e7eb', background: '#f9fafb', fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
+              <div>Product</div>
+              <div style={{ textAlign: 'right' }}>On-Hand</div>
+              <div style={{ textAlign: 'right' }}>In Machine</div>
+              <div style={{ textAlign: 'right' }}>Cost</div>
+              <div style={{ textAlign: 'right' }}>Expires</div>
+            </div>
+            <div className={styles.sectionBody} style={{ padding: 0 }}>
               {productInventory.filter(inv => {
                 if (!searchQuery.trim()) return true;
                 const q = searchQuery.toLowerCase();
@@ -367,34 +388,38 @@ export default function StockPage() {
                   {/* Product Row */}
                   <div
                     onClick={() => toggleExpanded(inv.product.id)}
-                    style={{ display: 'flex', alignItems: 'center', padding: '12px', cursor: 'pointer', background: expandedProducts.has(inv.product.id) ? '#f9fafb' : 'transparent' }}
+                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '8px', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: expandedProducts.has(inv.product.id) ? '#f9fafb' : 'transparent' }}
                   >
-                    <div style={{ width: '24px', color: '#6b7280' }}>{expandedProducts.has(inv.product.id) ? '▼' : '▶'}</div>
-                    <div style={{ flex: 1 }}>
-                      {inv.product.brand && <span style={{ color: '#FF580F', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>{inv.product.brand} </span>}
-                      <span style={{ fontWeight: 500 }}>{inv.product.name}</span>
-                    </div>
-                    <div style={{ textAlign: 'right', marginRight: '12px' }}>
-                      <div style={{ fontWeight: 600, color: '#FF580F', fontSize: '16px' }}>{inv.totalOnHand}</div>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>{inv.product.unit_name || 'units'} on hand</div>
-                    </div>
-                    {inv.avgUnitCost && (
-                      <div style={{ textAlign: 'right', marginRight: '12px', fontSize: '12px', color: '#6b7280' }}>
-                        ${inv.avgUnitCost.toFixed(2)}/{inv.product.unit_name || 'unit'}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#6b7280', fontSize: '12px' }}>{expandedProducts.has(inv.product.id) ? '▼' : '▶'}</span>
+                      <div>
+                        {inv.product.brand && <span style={{ color: '#FF580F', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>{inv.product.brand} </span>}
+                        <span style={{ fontWeight: 500 }}>{inv.product.name}</span>
                       </div>
-                    )}
-                    {inv.earliestExpiration && (
-                      <div style={{
-                        fontSize: '11px',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontWeight: 600,
-                        background: inv.expirationStatus === 'critical' ? '#fef2f2' : inv.expirationStatus === 'warning' ? '#fef3c7' : '#dcfce7',
-                        color: inv.expirationStatus === 'critical' ? '#dc2626' : inv.expirationStatus === 'warning' ? '#92400e' : '#16a34a',
-                      }}>
-                        {formatExpDate(inv.earliestExpiration)}
-                      </div>
-                    )}
+                    </div>
+                    <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>
+                      {inv.totalOnHand} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: '12px' }}>{inv.product.unit_name || 'units'}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', color: inv.totalInMachine > 0 ? '#16a34a' : '#9ca3af' }}>
+                      {inv.totalInMachine} <span style={{ color: '#6b7280', fontSize: '12px' }}>{inv.product.unit_name || 'units'}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: '13px' }}>
+                      {inv.avgUnitCost ? `$${inv.avgUnitCost.toFixed(2)}/${inv.product.unit_name || 'unit'}` : '—'}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      {inv.earliestExpiration ? (
+                        <span style={{
+                          fontSize: '12px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 500,
+                          background: inv.expirationStatus === 'critical' ? '#fef2f2' : inv.expirationStatus === 'warning' ? '#fef3c7' : '#dcfce7',
+                          color: inv.expirationStatus === 'critical' ? '#dc2626' : inv.expirationStatus === 'warning' ? '#92400e' : '#16a34a',
+                        }}>
+                          {formatExpDate(inv.earliestExpiration)}
+                        </span>
+                      ) : '—'}
+                    </div>
                   </div>
 
                   {/* Expanded Batches */}
