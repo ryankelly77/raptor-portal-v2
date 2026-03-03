@@ -35,11 +35,13 @@ export function createAdminToken(): string {
 
 export function verifyAdminToken(token: string): AdminTokenPayload | null {
   try {
-    const decoded = jwt.verify(token, getJwtSecret()) as TokenPayload;
-    if (decoded.type !== 'admin') {
+    const decoded = jwt.verify(token, getJwtSecret()) as Record<string, unknown>;
+    // Accept both 'type: admin' (new) and 'role: admin' (legacy) tokens
+    const isAdmin = decoded.type === 'admin' || decoded.role === 'admin';
+    if (!isAdmin) {
       return null;
     }
-    return decoded as AdminTokenPayload;
+    return { type: 'admin', iat: decoded.iat as number, exp: decoded.exp as number };
   } catch {
     return null;
   }
