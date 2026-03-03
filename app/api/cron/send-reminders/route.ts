@@ -27,6 +27,12 @@ interface Phase {
   tasks: Task[];
 }
 
+interface PropertyManager {
+  id: string;
+  name: string;
+  email: string;
+}
+
 interface Project {
   id: string;
   public_token: string;
@@ -34,11 +40,7 @@ interface Project {
   reminder_email: string | null;
   email_reminders_enabled: boolean;
   last_reminder_sent: string | null;
-  // Direct property manager assigned to the project
-  property_manager: {
-    name: string;
-    email: string;
-  } | null;
+  property_manager_id: string | null;
   location: {
     name: string;
     property: {
@@ -204,8 +206,16 @@ export async function GET(request: NextRequest) {
     const template = await getEmailTemplate(supabase, 'weekly-reminder');
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
 
+    // Fetch all property managers for lookup
+    const { data: allPMs } = await supabase
+      .from('property_managers')
+      .select('id, name, email');
+    const pmMap = new Map<string, PropertyManager>();
+    for (const pm of (allPMs || [])) {
+      pmMap.set(pm.id, pm as PropertyManager);
+    }
+
     // Fetch projects with reminders enabled
-    // Note: property_manager is fetched directly from project.property_manager_id
     let query = supabase
       .from('projects')
       .select(`
@@ -215,10 +225,7 @@ export async function GET(request: NextRequest) {
         reminder_email,
         email_reminders_enabled,
         last_reminder_sent,
-        property_manager:property_managers (
-          name,
-          email
-        ),
+        property_manager_id,
         location:locations (
           name,
           property:properties (
@@ -255,9 +262,10 @@ export async function GET(request: NextRequest) {
 
     for (const project of (projects || []) as unknown as Project[]) {
       const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
-      // Use property manager directly assigned to the project
-      const pmEmail = project.property_manager?.email;
-      const pmFullName = project.property_manager?.name || '';
+      // Look up property manager by ID
+      const pm = project.property_manager_id ? pmMap.get(project.property_manager_id) : null;
+      const pmEmail = pm?.email;
+      const pmFullName = pm?.name || '';
       const firstName = pmFullName.split(' ')[0] || '';
 
       // Skip if reminded in the last 24 hours (unless force flag is set)
@@ -374,8 +382,16 @@ export async function POST(request: NextRequest) {
     const template = await getEmailTemplate(supabase, 'weekly-reminder');
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
 
+    // Fetch all property managers for lookup
+    const { data: allPMs } = await supabase
+      .from('property_managers')
+      .select('id, name, email');
+    const pmMap = new Map<string, PropertyManager>();
+    for (const pm of (allPMs || [])) {
+      pmMap.set(pm.id, pm as PropertyManager);
+    }
+
     // Fetch projects with reminders enabled
-    // Note: property_manager is fetched directly from project.property_manager_id
     let query = supabase
       .from('projects')
       .select(`
@@ -385,10 +401,7 @@ export async function POST(request: NextRequest) {
         reminder_email,
         email_reminders_enabled,
         last_reminder_sent,
-        property_manager:property_managers (
-          name,
-          email
-        ),
+        property_manager_id,
         location:locations (
           name,
           property:properties (
@@ -425,9 +438,10 @@ export async function POST(request: NextRequest) {
 
     for (const project of (projects || []) as unknown as Project[]) {
       const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
-      // Use property manager directly assigned to the project
-      const pmEmail = project.property_manager?.email;
-      const pmFullName = project.property_manager?.name || '';
+      // Look up property manager by ID
+      const pm = project.property_manager_id ? pmMap.get(project.property_manager_id) : null;
+      const pmEmail = pm?.email;
+      const pmFullName = pm?.name || '';
       const firstName = pmFullName.split(' ')[0] || '';
 
       // Skip if reminded in the last 24 hours (unless force flag is set)

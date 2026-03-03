@@ -657,7 +657,12 @@ export default function ProjectEditorPage() {
                             <button
                               className={styles.btnSmall}
                               onClick={async () => {
-                                if (!window.confirm('Send reminder email for this project now?')) return;
+                                const recipientEmail = project.reminder_email || propertyManager?.email;
+                                if (!recipientEmail) {
+                                  alert('No email address configured for this project');
+                                  return;
+                                }
+                                if (!window.confirm(`Send reminder email to ${recipientEmail}?`)) return;
                                 try {
                                   const response = await adminFetch('/api/cron/send-reminders', {
                                     method: 'POST',
