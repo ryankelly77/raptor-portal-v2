@@ -553,33 +553,6 @@ export default function InventoryPage() {
   return (
     <AdminShell title="Inventory">
       <div className={styles.inventoryPage}>
-        {/* Nuke Button (for testing) */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-          <button
-            onClick={async () => {
-              if (!confirm('⚠️ NUKE ALL INVENTORY DATA?\n\nThis will delete:\n- All inventory movements\n- All purchase items\n- All purchases\n\nProducts will NOT be deleted.')) return;
-              if (!confirm('⚠️ FINAL WARNING! Click OK to proceed.')) return;
-              try {
-                const tables = ['inventory_movements', 'inventory_purchase_items', 'inventory_purchases'];
-                for (const table of tables) {
-                  const res = await adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table, action: 'read' }) });
-                  const data = await res.json();
-                  for (const item of (data.data || [])) {
-                    await adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table, action: 'delete', id: item.id }) });
-                  }
-                }
-                alert('💥 Inventory data nuked!');
-                window.location.reload();
-              } catch (err) {
-                alert('Failed: ' + (err instanceof Error ? err.message : 'Unknown'));
-              }
-            }}
-            style={{ padding: '4px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            ☢️ NUKE
-          </button>
-        </div>
-
         {error && (
           <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
             {error}
