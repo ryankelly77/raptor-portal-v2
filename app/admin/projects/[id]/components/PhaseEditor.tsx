@@ -148,14 +148,38 @@ export function PhaseEditor({ phase, phaseNumber, projectId, surveyData, onRefre
     try {
       await updateTask(taskId, updates);
 
-      // Recalculate overall_progress after task update
+      // Recalculate phase status and overall_progress after task update
       if ('completed' in updates) {
+        await recalculatePhaseStatus(phase.id);
         await recalculateProjectProgress(projectId);
       }
 
       await onRefresh();
     } catch (err) {
       alert('Error updating task: ' + (err instanceof Error ? err.message : 'Unknown'));
+    }
+  }
+
+  // Calculate and update phase status based on task completion
+  async function recalculatePhaseStatus(phaseId: string) {
+    try {
+      const tasks = await fetchTasks(phaseId);
+      if (tasks.length === 0) return;
+
+      const completedCount = tasks.filter((t: TaskType) => t.completed).length;
+      let newStatus: 'pending' | 'in-progress' | 'completed';
+
+      if (completedCount === 0) {
+        newStatus = 'pending';
+      } else if (completedCount === tasks.length) {
+        newStatus = 'completed';
+      } else {
+        newStatus = 'in-progress';
+      }
+
+      await updatePhase(phaseId, { status: newStatus });
+    } catch (err) {
+      console.error('Error recalculating phase status:', err);
     }
   }
 
