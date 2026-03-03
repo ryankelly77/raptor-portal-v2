@@ -322,8 +322,30 @@ function AdjustPageContent() {
                 {onHandQty === 0 && (
                   <button
                     onClick={async () => {
-                      if (!confirm(`Delete "${selectedProductData.brand ? selectedProductData.brand + ' - ' : ''}${selectedProductData.name}"?\n\nThis cannot be undone.`)) return;
                       try {
+                        // Check for related records first
+                        const [movementsRes, purchaseItemsRes] = await Promise.all([
+                          adminFetch('/api/admin/crud', {
+                            method: 'POST',
+                            body: JSON.stringify({ table: 'inventory_movements', action: 'read', filters: { product_id: selectedProduct } }),
+                          }),
+                          adminFetch('/api/admin/crud', {
+                            method: 'POST',
+                            body: JSON.stringify({ table: 'inventory_purchase_items', action: 'read', filters: { product_id: selectedProduct } }),
+                          }),
+                        ]);
+                        const movementsData = await movementsRes.json();
+                        const purchaseItemsData = await purchaseItemsRes.json();
+                        const movementCount = movementsData.data?.length || 0;
+                        const purchaseItemCount = purchaseItemsData.data?.length || 0;
+
+                        if (movementCount > 0 || purchaseItemCount > 0) {
+                          alert(`Cannot delete: This product has ${movementCount} movement records and ${purchaseItemCount} purchase item records.\n\nDelete these records first in Supabase if you really want to remove this product.`);
+                          return;
+                        }
+
+                        if (!confirm(`Delete "${selectedProductData.brand ? selectedProductData.brand + ' - ' : ''}${selectedProductData.name}"?\n\nThis cannot be undone.`)) return;
+
                         const res = await adminFetch('/api/admin/crud', {
                           method: 'POST',
                           body: JSON.stringify({
