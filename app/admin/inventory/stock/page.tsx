@@ -75,7 +75,7 @@ export default function StockPage() {
 
   // Batch action states
   const [actionBatch, setActionBatch] = useState<Batch | null>(null);
-  const [actionDestination, setActionDestination] = useState<'machine' | 'expired' | 'shrinkage' | ''>('');
+  const [actionDestination, setActionDestination] = useState<'machine' | 'expired' | 'shrinkage' | 'duplicate' | ''>('');
   const [actionQty, setActionQty] = useState('');
   const [actionLocation, setActionLocation] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
@@ -148,11 +148,12 @@ export default function StockPage() {
           soldByProduct.set(m.product_id, currentSold + m.quantity);
         } else if (m.movement_type === 'shrinkage') {
           // Track expired vs general shrinkage based on notes
+          // Exclude "Duplicate" - that's a data correction, not actual loss
           const qty = Math.abs(m.quantity);
           if (m.notes === 'Expired') {
             const current = expiredByProduct.get(m.product_id) || 0;
             expiredByProduct.set(m.product_id, current + qty);
-          } else {
+          } else if (m.notes !== 'Duplicate') {
             const current = shrinkageByProduct.get(m.product_id) || 0;
             shrinkageByProduct.set(m.product_id, current + qty);
           }
@@ -354,6 +355,17 @@ export default function StockPage() {
         });
         if (!inRes.ok) throw new Error((await inRes.json()).error || 'Failed to record in movement');
 
+      } else if (actionDestination === 'duplicate') {
+        // Duplicate: delete the purchase item entirely (it was entered by mistake)
+        const res = await adminFetch('/api/admin/crud', {
+          method: 'POST',
+          body: JSON.stringify({
+            table: 'inventory_purchase_items',
+            action: 'delete',
+            id: actionBatch.purchaseItem.id,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete duplicate');
       } else {
         // Expired or Shrinkage: single shrinkage movement
         const notes = actionDestination === 'expired' ? 'Expired' : 'Shrinkage';
@@ -581,11 +593,12 @@ export default function StockPage() {
               </p>
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Destination</label>
-                <select value={actionDestination} onChange={(e) => setActionDestination(e.target.value as 'machine' | 'expired' | 'shrinkage' | '')} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
+                <select value={actionDestination} onChange={(e) => setActionDestination(e.target.value as 'machine' | 'expired' | 'shrinkage' | 'duplicate' | '')} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
                   <option value="">Select destination...</option>
                   <option value="machine">Machine</option>
                   <option value="expired">Expired</option>
                   <option value="shrinkage">Shrinkage</option>
+                  <option value="duplicate">Duplicate (delete entry)</option>
                 </select>
               </div>
               {actionDestination === 'machine' && (
@@ -605,7 +618,7 @@ export default function StockPage() {
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => { setActionBatch(null); setActionQty(''); setActionDestination(''); setActionLocation(''); }} style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handleBatchAction} disabled={actionSaving || !actionQty || !actionDestination || (actionDestination === 'machine' && !actionLocation)} style={{ flex: 1, padding: '12px', background: actionDestination === 'expired' || actionDestination === 'shrinkage' ? '#dc2626' : '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: actionSaving ? 'wait' : 'pointer' }}>
+                <button onClick={handleBatchAction} disabled={actionSaving || !actionQty || !actionDestination || (actionDestination === 'machine' && !actionLocation)} style={{ flex: 1, padding: '12px', background: actionDestination === 'expired' || actionDestination === 'shrinkage' || actionDestination === 'duplicate' ? '#dc2626' : '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: actionSaving ? 'wait' : 'pointer' }}>
                   {actionSaving ? 'Saving...' : 'Confirm'}
                 </button>
               </div>
