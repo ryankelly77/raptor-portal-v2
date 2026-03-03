@@ -171,13 +171,26 @@ export default function ProjectEditorPage() {
   const [savedProject, setSavedProject] = useState(false);
   const [showPhaseModal, setShowPhaseModal] = useState(false);
 
-  // Derived data
+  // Derived data - CORRECT CHAIN: project → location → property → property_manager
   const location = locations.find((l) => l.id === project?.location_id);
   const property = location ? properties.find((p) => p.id === location.property_id) : undefined;
-  // Use project's direct property_manager_id, not the property's
-  const propertyManager = project?.property_manager_id
-    ? managers.find((m) => m.id === project.property_manager_id)
+  const propertyManager = property?.property_manager_id
+    ? managers.find((m) => m.id === property.property_manager_id)
     : undefined;
+
+  // DEBUG: Log the full chain
+  if (project) {
+    console.log('PM LOOKUP CHAIN:', {
+      projectId: project.id,
+      projectLocationId: project.location_id,
+      locationId: location?.id,
+      locationPropertyId: location?.property_id,
+      propertyId: property?.id,
+      propertyPmId: property?.property_manager_id,
+      pmId: propertyManager?.id,
+      pmEmail: propertyManager?.email,
+    });
+  }
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -658,12 +671,35 @@ export default function ProjectEditorPage() {
                             <button
                               className={styles.btnSmall}
                               onClick={async () => {
-                                const recipientEmail = project.reminder_email || propertyManager?.email;
+                                // Show full chain for debugging
+                                const pmName = propertyManager?.name || 'Unknown';
+                                const pmEmail = propertyManager?.email;
+                                const recipientEmail = project.reminder_email || pmEmail;
+                                const ccEmails = 'ryan@raptor-vending.com, tracie@raptor-vending.com, cristian@raptor-vending.com';
+                                const propertyName = property?.name || 'Unknown Property';
+
+                                console.log('SEND REMINDER - FULL CHAIN:', {
+                                  projectId: project.id,
+                                  projectLocationId: project.location_id,
+                                  locationId: location?.id,
+                                  locationPropertyId: location?.property_id,
+                                  propertyId: property?.id,
+                                  propertyPmId: property?.property_manager_id,
+                                  pmId: propertyManager?.id,
+                                  pmName,
+                                  pmEmail,
+                                  reminderEmailOverride: project.reminder_email,
+                                  finalRecipient: recipientEmail,
+                                });
+
                                 if (!recipientEmail) {
-                                  alert('No email address configured for this project');
+                                  alert(`No email address configured.\n\nChain:\n- Location: ${location?.name || 'Not set'}\n- Property: ${propertyName}\n- PM: ${pmName}`);
                                   return;
                                 }
-                                if (!window.confirm(`Send reminder email to ${recipientEmail}?`)) return;
+
+                                const confirmMsg = `Send reminder email?\n\nTo: ${pmName} (${recipientEmail})\nProperty: ${propertyName}\nCC: ${ccEmails}\n\nClick OK to send.`;
+                                if (!window.confirm(confirmMsg)) return;
+
                                 try {
                                   const response = await adminFetch('/api/cron/send-reminders', {
                                     method: 'POST',

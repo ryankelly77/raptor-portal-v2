@@ -27,12 +27,6 @@ interface Phase {
   tasks: Task[];
 }
 
-interface PropertyManager {
-  id: string;
-  name: string;
-  email: string;
-}
-
 interface Project {
   id: string;
   public_token: string;
@@ -40,11 +34,20 @@ interface Project {
   reminder_email: string | null;
   email_reminders_enabled: boolean;
   last_reminder_sent: string | null;
-  property_manager_id: string | null;
+  // CORRECT CHAIN: project → location → property → property_manager
   location: {
+    id: string;
     name: string;
+    property_id: string;
     property: {
+      id: string;
       name: string;
+      property_manager_id: string | null;
+      property_manager: {
+        id: string;
+        name: string;
+        email: string;
+      } | null;
     } | null;
   } | null;
   phases: Phase[];
@@ -208,16 +211,7 @@ export async function GET(request: NextRequest) {
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
     console.log('[SendReminders] Template:', template ? 'found' : 'not found', 'CC emails:', ccEmails);
 
-    // Fetch all property managers for lookup
-    const { data: allPMs } = await supabase
-      .from('property_managers')
-      .select('id, name, email');
-    const pmMap = new Map<string, PropertyManager>();
-    for (const pm of (allPMs || [])) {
-      pmMap.set(pm.id, pm as PropertyManager);
-    }
-
-    // Fetch projects with reminders enabled
+    // Fetch projects with FULL CHAIN: project → location → property → property_manager
     let query = supabase
       .from('projects')
       .select(`
@@ -227,11 +221,19 @@ export async function GET(request: NextRequest) {
         reminder_email,
         email_reminders_enabled,
         last_reminder_sent,
-        property_manager_id,
         location:locations (
+          id,
           name,
+          property_id,
           property:properties (
-            name
+            id,
+            name,
+            property_manager_id,
+            property_manager:property_managers (
+              id,
+              name,
+              email
+            )
           )
         ),
         phases (
@@ -258,17 +260,33 @@ export async function GET(request: NextRequest) {
       throw new Error(`Database error: ${projectsError.message}`);
     }
 
-    const results: Array<{ project: string; status: string; reason?: string; to?: string; tasks?: number; error?: string }> = [];
+    const results: Array<{ project: string; status: string; reason?: string; to?: string; cc?: string; pmName?: string; tasks?: number; error?: string }> = [];
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     for (const project of (projects || []) as unknown as Project[]) {
       const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
-      // Look up property manager by ID
-      const pm = project.property_manager_id ? pmMap.get(project.property_manager_id) : null;
+
+      // CORRECT CHAIN: project → location → property → property_manager
+      const pm = project.location?.property?.property_manager;
       const pmEmail = pm?.email;
       const pmFullName = pm?.name || '';
       const firstName = pmFullName.split(' ')[0] || '';
+
+      // DEBUG: Log the full chain for tracing
+      console.log('[SendReminders] PM CHAIN:', {
+        projectId: project.id,
+        projectNumber: project.project_number,
+        locationId: project.location?.id,
+        locationName: project.location?.name,
+        propertyId: project.location?.property?.id,
+        propertyName: project.location?.property?.name,
+        propertyPmId: project.location?.property?.property_manager_id,
+        pmId: pm?.id,
+        pmName: pm?.name,
+        pmEmail: pm?.email,
+        reminderEmailOverride: project.reminder_email,
+      });
 
       // Skip if reminded in the last 24 hours (unless force flag is set)
       if (!forceResend && project.last_reminder_sent && new Date(project.last_reminder_sent) > oneDayAgo) {
@@ -330,7 +348,7 @@ export async function GET(request: NextRequest) {
             actor_type: 'system',
           });
 
-        results.push({ project: propertyName, status: 'sent', to: recipientEmail, tasks: incompleteCount });
+        results.push({ project: propertyName, status: 'sent', to: recipientEmail, cc: ccEmails, pmName: pmFullName, tasks: incompleteCount });
       } catch (emailError) {
         console.error(`Failed to send to ${propertyName}:`, emailError instanceof Error ? emailError.message : emailError);
         results.push({ project: propertyName, status: 'error', error: emailError instanceof Error ? emailError.message : 'Unknown error' });
@@ -385,16 +403,7 @@ export async function POST(request: NextRequest) {
     const ccEmails = template?.cc_emails || DEFAULT_CC_EMAILS;
     console.log('[SendReminders] Template:', template ? 'found' : 'not found', 'CC emails:', ccEmails);
 
-    // Fetch all property managers for lookup
-    const { data: allPMs } = await supabase
-      .from('property_managers')
-      .select('id, name, email');
-    const pmMap = new Map<string, PropertyManager>();
-    for (const pm of (allPMs || [])) {
-      pmMap.set(pm.id, pm as PropertyManager);
-    }
-
-    // Fetch projects with reminders enabled
+    // Fetch projects with FULL CHAIN: project → location → property → property_manager
     let query = supabase
       .from('projects')
       .select(`
@@ -404,11 +413,19 @@ export async function POST(request: NextRequest) {
         reminder_email,
         email_reminders_enabled,
         last_reminder_sent,
-        property_manager_id,
         location:locations (
+          id,
           name,
+          property_id,
           property:properties (
-            name
+            id,
+            name,
+            property_manager_id,
+            property_manager:property_managers (
+              id,
+              name,
+              email
+            )
           )
         ),
         phases (
@@ -435,17 +452,33 @@ export async function POST(request: NextRequest) {
       throw new Error(`Database error: ${projectsError.message}`);
     }
 
-    const results: Array<{ project: string; status: string; reason?: string; to?: string; tasks?: number; error?: string }> = [];
+    const results: Array<{ project: string; status: string; reason?: string; to?: string; cc?: string; pmName?: string; tasks?: number; error?: string }> = [];
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     for (const project of (projects || []) as unknown as Project[]) {
       const propertyName = project.location?.property?.name || project.location?.name || project.project_number;
-      // Look up property manager by ID
-      const pm = project.property_manager_id ? pmMap.get(project.property_manager_id) : null;
+
+      // CORRECT CHAIN: project → location → property → property_manager
+      const pm = project.location?.property?.property_manager;
       const pmEmail = pm?.email;
       const pmFullName = pm?.name || '';
       const firstName = pmFullName.split(' ')[0] || '';
+
+      // DEBUG: Log the full chain for tracing
+      console.log('[SendReminders] PM CHAIN:', {
+        projectId: project.id,
+        projectNumber: project.project_number,
+        locationId: project.location?.id,
+        locationName: project.location?.name,
+        propertyId: project.location?.property?.id,
+        propertyName: project.location?.property?.name,
+        propertyPmId: project.location?.property?.property_manager_id,
+        pmId: pm?.id,
+        pmName: pm?.name,
+        pmEmail: pm?.email,
+        reminderEmailOverride: project.reminder_email,
+      });
 
       // Skip if reminded in the last 24 hours (unless force flag is set)
       if (!forceResend && project.last_reminder_sent && new Date(project.last_reminder_sent) > oneDayAgo) {
@@ -507,7 +540,7 @@ export async function POST(request: NextRequest) {
             actor_type: 'system',
           });
 
-        results.push({ project: propertyName, status: 'sent', to: recipientEmail, tasks: incompleteCount });
+        results.push({ project: propertyName, status: 'sent', to: recipientEmail, cc: ccEmails, pmName: pmFullName, tasks: incompleteCount });
       } catch (emailError) {
         console.error(`Failed to send to ${propertyName}:`, emailError instanceof Error ? emailError.message : emailError);
         results.push({ project: propertyName, status: 'error', error: emailError instanceof Error ? emailError.message : 'Unknown error' });
