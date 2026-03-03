@@ -334,3 +334,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }
+
+// Also support POST for manual triggers from admin UI
+export { GET as POST };
