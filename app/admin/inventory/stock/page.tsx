@@ -54,6 +54,8 @@ interface ProductWithBatches {
   totalOnHand: number;
   totalInMachine: number;
   totalSold: number;
+  totalExpired: number;
+  totalShrinkage: number;
   avgUnitCost: number | null;
   totalValue: number;
   earliestExpiration: string | null;
@@ -72,9 +74,9 @@ export default function StockPage() {
   const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
 
   // Batch action states
-  const [actionBatch, setActionBatch] = useState<{ batch: Batch; action: 'push_to_machine' | 'discard' | 'adjust' } | null>(null);
+  const [actionBatch, setActionBatch] = useState<Batch | null>(null);
+  const [actionDestination, setActionDestination] = useState<'machine' | 'expired' | 'shrinkage' | ''>('');
   const [actionQty, setActionQty] = useState('');
-  const [actionReason, setActionReason] = useState('');
   const [actionLocation, setActionLocation] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
 
@@ -83,13 +85,14 @@ export default function StockPage() {
       setLoading(true);
       setError(null);
 
-      const [productsRes, movementsRes, purchaseItemsRes, purchasesRes, expirationRes, locationsRes] = await Promise.all([
+      const [productsRes, movementsRes, purchaseItemsRes, purchasesRes, expirationRes, locationsRes, propertiesRes] = await Promise.all([
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'products', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'inventory_movements', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'inventory_purchase_items', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'inventory_purchases', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'expiration_settings', action: 'read' }) }),
         adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'locations', action: 'read' }) }),
+        adminFetch('/api/admin/crud', { method: 'POST', body: JSON.stringify({ table: 'properties', action: 'read' }) }),
       ]);
 
       const products: Product[] = (await productsRes.json()).data || [];
@@ -98,7 +101,14 @@ export default function StockPage() {
       const purchases: Purchase[] = (await purchasesRes.json()).data || [];
       const expSettings = (await expirationRes.json()).data || [];
       const locationsData = (await locationsRes.json()).data || [];
-      setLocations(locationsData.map((l: { id: string; name: string }) => ({ id: l.id, name: l.name })));
+      const propertiesData = (await propertiesRes.json()).data || [];
+
+      // Map property_id to building name
+      const propertiesMap = new Map<string, string>(propertiesData.map((p: { id: string; name: string }) => [p.id, p.name]));
+      setLocations(locationsData.map((l: { id: string; name: string; property_id: string }) => ({
+        id: l.id,
+        name: propertiesMap.get(l.property_id) || l.name
+      })));
 
       type ExpSetting = { category: string; warning_days: number; critical_days: number };
       const productsMap = new Map(products.map(p => [p.id, p]));
@@ -116,6 +126,9 @@ export default function StockPage() {
       const inMachineByProduct = new Map<string, number>();
       // Track sold units per product
       const soldByProduct = new Map<string, number>();
+      // Track expired and shrinkage per product
+      const expiredByProduct = new Map<string, number>();
+      const shrinkageByProduct = new Map<string, number>();
 
       for (const m of movements) {
         if (m.purchase_item_id) {
@@ -133,6 +146,16 @@ export default function StockPage() {
           // Track total sold
           const currentSold = soldByProduct.get(m.product_id) || 0;
           soldByProduct.set(m.product_id, currentSold + m.quantity);
+        } else if (m.movement_type === 'shrinkage') {
+          // Track expired vs general shrinkage based on notes
+          const qty = Math.abs(m.quantity);
+          if (m.notes === 'Expired') {
+            const current = expiredByProduct.get(m.product_id) || 0;
+            expiredByProduct.set(m.product_id, current + qty);
+          } else {
+            const current = shrinkageByProduct.get(m.product_id) || 0;
+            shrinkageByProduct.set(m.product_id, current + qty);
+          }
         }
       }
 
@@ -240,6 +263,8 @@ export default function StockPage() {
           totalOnHand,
           totalInMachine: Math.max(0, inMachineByProduct.get(product.id) || 0),
           totalSold: soldByProduct.get(product.id) || 0,
+          totalExpired: expiredByProduct.get(product.id) || 0,
+          totalShrinkage: shrinkageByProduct.get(product.id) || 0,
           avgUnitCost: totalOnHand > 0 ? totalCost / totalOnHand : null,
           totalValue: totalCost,
           earliestExpiration: earliestExp,
@@ -278,14 +303,14 @@ export default function StockPage() {
   };
 
   const handleBatchAction = async () => {
-    if (!actionBatch || !actionQty) return;
+    if (!actionBatch || !actionQty || !actionDestination) return;
     const qty = parseInt(actionQty);
     if (isNaN(qty) || qty <= 0) return;
 
     setActionSaving(true);
     try {
-      if (actionBatch.action === 'push_to_machine') {
-        // Push to Machine creates TWO movements:
+      if (actionDestination === 'machine') {
+        // Move to Machine creates TWO movements:
         // 1. restock_out: removes from on-hand (storage)
         // 2. restock_in: adds to machine
 
@@ -296,13 +321,13 @@ export default function StockPage() {
             table: 'inventory_movements',
             action: 'create',
             data: {
-              product_id: actionBatch.batch.product.id,
-              quantity: -qty, // Negative = leaving storage
+              product_id: actionBatch.product.id,
+              quantity: -qty,
               movement_type: 'restock_out',
               moved_by: 'Admin',
-              notes: actionReason || 'Pushed to machine',
-              purchase_item_id: actionBatch.batch.purchaseItem.id,
-              expiration_date: actionBatch.batch.expirationDate,
+              notes: 'Moved to machine',
+              purchase_item_id: actionBatch.purchaseItem.id,
+              expiration_date: actionBatch.expirationDate,
             },
           }),
         });
@@ -316,13 +341,13 @@ export default function StockPage() {
             table: 'inventory_movements',
             action: 'create',
             data: {
-              product_id: actionBatch.batch.product.id,
-              quantity: qty, // Positive = entering machine
+              product_id: actionBatch.product.id,
+              quantity: qty,
               movement_type: 'restock_in',
               moved_by: 'Admin',
-              notes: `Pushed to ${locationName}`,
-              purchase_item_id: actionBatch.batch.purchaseItem.id,
-              expiration_date: actionBatch.batch.expirationDate,
+              notes: `Moved to ${locationName}`,
+              purchase_item_id: actionBatch.purchaseItem.id,
+              expiration_date: actionBatch.expirationDate,
               location_id: actionLocation || null,
             },
           }),
@@ -330,28 +355,21 @@ export default function StockPage() {
         if (!inRes.ok) throw new Error((await inRes.json()).error || 'Failed to record in movement');
 
       } else {
-        // Discard or Adjust: single movement
-        let movementType = '';
-        let movementQty = 0;
-
-        switch (actionBatch.action) {
-          case 'discard': movementType = 'shrinkage'; movementQty = -qty; break;
-          case 'adjust': movementType = 'adjustment'; movementQty = qty - actionBatch.batch.remainingQty; break;
-        }
-
+        // Expired or Shrinkage: single shrinkage movement
+        const notes = actionDestination === 'expired' ? 'Expired' : 'Shrinkage';
         const res = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
             table: 'inventory_movements',
             action: 'create',
             data: {
-              product_id: actionBatch.batch.product.id,
-              quantity: movementQty,
-              movement_type: movementType,
+              product_id: actionBatch.product.id,
+              quantity: -qty,
+              movement_type: 'shrinkage',
               moved_by: 'Admin',
-              notes: actionReason || `${actionBatch.action} from batch`,
-              purchase_item_id: actionBatch.batch.purchaseItem.id,
-              expiration_date: actionBatch.batch.expirationDate,
+              notes,
+              purchase_item_id: actionBatch.purchaseItem.id,
+              expiration_date: actionBatch.expirationDate,
             },
           }),
         });
@@ -359,8 +377,8 @@ export default function StockPage() {
       }
 
       setActionBatch(null);
+      setActionDestination('');
       setActionQty('');
-      setActionReason('');
       setActionLocation('');
       loadData();
     } catch (err) {
@@ -435,11 +453,13 @@ export default function StockPage() {
         ) : (
           <div className={styles.sectionCard}>
             {/* Table Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', borderBottom: '2px solid #e5e7eb', background: '#f9fafb', fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', borderBottom: '2px solid #e5e7eb', background: '#f9fafb', fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
               <div>Product</div>
               <div style={{ textAlign: 'right' }}>On-Hand</div>
               <div style={{ textAlign: 'right' }}>In Machine</div>
               <div style={{ textAlign: 'right' }}>Sold</div>
+              <div style={{ textAlign: 'right' }}>Expired</div>
+              <div style={{ textAlign: 'right' }}>Shrinkage</div>
               <div style={{ textAlign: 'right' }}>Cost</div>
               <div style={{ textAlign: 'right' }}>Expires</div>
             </div>
@@ -457,7 +477,7 @@ export default function StockPage() {
                   {/* Product Row */}
                   <div
                     onClick={() => toggleExpanded(inv.product.id)}
-                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '8px', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: expandedProducts.has(inv.product.id) ? '#f9fafb' : 'transparent' }}
+                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr', gap: '8px', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: expandedProducts.has(inv.product.id) ? '#f9fafb' : 'transparent' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ color: '#6b7280', fontSize: '12px' }}>{expandedProducts.has(inv.product.id) ? '▼' : '▶'}</span>
@@ -467,16 +487,22 @@ export default function StockPage() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>
-                      {inv.totalOnHand} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: '12px' }}>{pluralize(inv.totalOnHand, inv.product.unit_name || 'unit')}</span>
+                      {inv.totalOnHand}
                     </div>
                     <div style={{ textAlign: 'right', color: inv.totalInMachine > 0 ? '#16a34a' : '#9ca3af' }}>
-                      {inv.totalInMachine} <span style={{ color: '#6b7280', fontSize: '12px' }}>{pluralize(inv.totalInMachine, inv.product.unit_name || 'unit')}</span>
+                      {inv.totalInMachine}
                     </div>
                     <div style={{ textAlign: 'right', color: inv.totalSold > 0 ? '#2563eb' : '#9ca3af' }}>
-                      {inv.totalSold} <span style={{ color: '#6b7280', fontSize: '12px' }}>{pluralize(inv.totalSold, inv.product.unit_name || 'unit')}</span>
+                      {inv.totalSold}
+                    </div>
+                    <div style={{ textAlign: 'right', color: inv.totalExpired > 0 ? '#dc2626' : '#9ca3af' }}>
+                      {inv.totalExpired}
+                    </div>
+                    <div style={{ textAlign: 'right', color: inv.totalShrinkage > 0 ? '#f59e0b' : '#9ca3af' }}>
+                      {inv.totalShrinkage}
                     </div>
                     <div style={{ textAlign: 'right', fontSize: '13px' }}>
-                      {inv.avgUnitCost ? `$${inv.avgUnitCost.toFixed(2)}/${inv.product.unit_name || 'unit'}` : '—'}
+                      {inv.avgUnitCost ? `$${inv.avgUnitCost.toFixed(2)}` : '—'}
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       {inv.earliestExpiration ? (
@@ -530,11 +556,8 @@ export default function StockPage() {
                           </div>
                           {/* Actions */}
                           <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-                            <button onClick={(e) => { e.stopPropagation(); setActionBatch({ batch, action: 'push_to_machine' }); setActionQty(String(batch.remainingQty)); }} style={{ padding: '8px 16px', background: batch.isOldest ? '#FF580F' : '#f3f4f6', color: batch.isOldest ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
-                              Push to Machine ▸
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); setActionBatch({ batch, action: 'discard' }); setActionQty(String(batch.remainingQty)); }} style={{ padding: '8px 16px', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-                              Discard
+                            <button onClick={(e) => { e.stopPropagation(); setActionBatch(batch); setActionQty(String(batch.remainingQty)); setActionDestination(''); }} style={{ padding: '8px 16px', background: batch.isOldest ? '#FF580F' : '#f3f4f6', color: batch.isOldest ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
+                              Move ▸
                             </button>
                           </div>
                         </div>
@@ -551,22 +574,25 @@ export default function StockPage() {
         {actionBatch && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
             <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', maxWidth: '400px', width: '100%' }}>
-              <h3 style={{ margin: '0 0 16px', fontSize: '16px' }}>
-                {actionBatch.action === 'push_to_machine' ? 'Push to Machine' : actionBatch.action === 'discard' ? 'Discard Items' : 'Adjust Count'}
-              </h3>
+              <h3 style={{ margin: '0 0 16px', fontSize: '16px' }}>Move Inventory</h3>
               <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 16px' }}>
-                {actionBatch.batch.product.brand && <strong>{actionBatch.batch.product.brand} </strong>}{actionBatch.batch.product.name}
-                <br /><span style={{ fontSize: '12px' }}>{actionBatch.batch.remainingQty} available</span>
+                {actionBatch.product.brand && <strong>{actionBatch.product.brand} </strong>}{actionBatch.product.name}
+                <br /><span style={{ fontSize: '12px' }}>{actionBatch.remainingQty} available</span>
               </p>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Quantity ({pluralize(2, actionBatch.batch.product.unit_name || 'unit')})</label>
-                <input type="number" value={actionQty} onChange={(e) => setActionQty(e.target.value)} max={actionBatch.batch.remainingQty} min={0} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Destination</label>
+                <select value={actionDestination} onChange={(e) => setActionDestination(e.target.value as 'machine' | 'expired' | 'shrinkage' | '')} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
+                  <option value="">Select destination...</option>
+                  <option value="machine">Machine</option>
+                  <option value="expired">Expired</option>
+                  <option value="shrinkage">Shrinkage</option>
+                </select>
               </div>
-              {actionBatch.action === 'push_to_machine' && (
+              {actionDestination === 'machine' && (
                 <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Location (Machine)</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Building</label>
                   <select value={actionLocation} onChange={(e) => setActionLocation(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
-                    <option value="">Select location...</option>
+                    <option value="">Select building...</option>
                     {locations.map(loc => (
                       <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
@@ -574,16 +600,12 @@ export default function StockPage() {
                 </div>
               )}
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Reason</label>
-                <select value={actionReason} onChange={(e) => setActionReason(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
-                  <option value="">Select...</option>
-                  {actionBatch.action === 'discard' && <><option value="Expired">Expired</option><option value="Damaged">Damaged</option><option value="Lost">Lost</option><option value="Duplicate">Duplicate</option></>}
-                  {actionBatch.action === 'push_to_machine' && <><option value="Routine restock">Routine restock</option><option value="Expiring soon">Expiring soon</option></>}
-                </select>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Quantity ({pluralize(2, actionBatch.product.unit_name || 'unit')})</label>
+                <input type="number" value={actionQty} onChange={(e) => setActionQty(e.target.value)} max={actionBatch.remainingQty} min={1} style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '16px' }} />
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => { setActionBatch(null); setActionQty(''); setActionReason(''); }} style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handleBatchAction} disabled={actionSaving || !actionQty} style={{ flex: 1, padding: '12px', background: actionBatch.action === 'discard' ? '#dc2626' : '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: actionSaving ? 'wait' : 'pointer' }}>
+                <button onClick={() => { setActionBatch(null); setActionQty(''); setActionDestination(''); setActionLocation(''); }} style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleBatchAction} disabled={actionSaving || !actionQty || !actionDestination || (actionDestination === 'machine' && !actionLocation)} style={{ flex: 1, padding: '12px', background: actionDestination === 'expired' || actionDestination === 'shrinkage' ? '#dc2626' : '#FF580F', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: actionSaving ? 'wait' : 'pointer' }}>
                   {actionSaving ? 'Saving...' : 'Confirm'}
                 </button>
               </div>
