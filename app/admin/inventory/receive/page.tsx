@@ -9,7 +9,7 @@ import { adminFetch, ApiError, AuthError } from '@/lib/admin-fetch';
 import styles from '../inventory.module.css';
 
 // Build version for debugging
-const BUILD_VERSION = 'v2024-MAR02-M';
+const BUILD_VERSION = 'v2024-MAR02-N';
 
 interface ErrorInfo {
   message: string;
@@ -619,11 +619,8 @@ export default function ReceiveItemsPage() {
       }
 
       const purchaseId = purchaseData.data.id;
-      alert(`Step 1: Purchase created with ID: ${purchaseId}`);
 
       // 2. Process each item
-      let itemsProcessed = 0;
-      let createdMovementIds: string[] = [];
       for (const item of items) {
         let productId = item.productId;
 
@@ -678,13 +675,10 @@ export default function ReceiveItemsPage() {
         });
 
         const purchaseItemData = await purchaseItemRes.json();
-        let purchaseItemId: string | null = null;
         if (!purchaseItemRes.ok) {
-          alert(`PURCHASE ITEM FAILED: ${purchaseItemData.error || JSON.stringify(purchaseItemData)}`);
           throw new Error(`Purchase item failed: ${purchaseItemData.error}`);
-        } else {
-          purchaseItemId = purchaseItemData.data?.id || null;
         }
+        const purchaseItemId = purchaseItemData.data?.id || null;
 
         // Create inventory movement (quantity is in PACKAGES for movements)
         // The dashboard calculates: packages × units_per_package to get total units
@@ -705,18 +699,12 @@ export default function ReceiveItemsPage() {
           }),
         });
 
-        const movementData = await movementRes.json();
         if (!movementRes.ok) {
-          alert(`Movement FAILED for ${item.name}: ${movementData.error || 'Unknown error'}`);
+          const movementData = await movementRes.json();
           throw new Error(`Failed to create movement: ${movementData.error || 'Unknown error'}`);
-        } else {
-          createdMovementIds.push(movementData.data?.id || 'no-id');
-          console.log('[Receive] Created movement:', movementData.data?.id, 'qty:', packageQty, 'pkgs (', totalUnits, 'units)', 'exp:', item.expirationDate);
         }
-        itemsProcessed++;
       }
 
-      alert(`SUCCESS!\n\nPurchase ID: ${purchaseId}\nItems: ${itemsProcessed}\nMovement IDs: ${createdMovementIds.join(', ')}\n\nCheck DB for these IDs.`);
       router.push('/admin/inventory');
 
     } catch (err: unknown) {

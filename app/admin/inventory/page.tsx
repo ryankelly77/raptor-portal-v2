@@ -7,7 +7,7 @@ import { adminFetch, AuthError } from '@/lib/admin-fetch';
 import styles from './inventory.module.css';
 
 // BUILD VERSION - update this to verify deployment
-const BUILD_VERSION = 'v2024-MAR02-M';
+const BUILD_VERSION = 'v2024-MAR02-N';
 
 interface Product {
   id: string;
@@ -113,7 +113,6 @@ export default function InventoryPage() {
   const [actionQty, setActionQty] = useState('');
   const [actionReason, setActionReason] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>('');
 
   const loadData = useCallback(async () => {
     try {
@@ -163,11 +162,6 @@ export default function InventoryPage() {
 
       const expSettingsData = await expirationRes.json();
       const expSettings = expSettingsData.data || [];
-
-      // DEBUG: Log what we loaded and set visible debug info
-      const debugStr = `Products: ${productsList.length} | Movements: ${movementsList.length} | PurchaseItems: ${purchaseItemsList.length} | Purchases: ${purchasesList.length}`;
-      console.log('[Inventory] Loaded:', debugStr);
-      setDebugInfo(debugStr);
 
       // Create maps for lookups
       const productsMap = new Map(productsList.map(p => [p.id, p]));
@@ -559,16 +553,8 @@ export default function InventoryPage() {
   return (
     <AdminShell title="Inventory">
       <div className={styles.inventoryPage}>
-        {/* Build Version + Debug Info + Nuke Button */}
-        <div style={{ background: '#fef3c7', color: '#92400e', padding: '8px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '11px', fontFamily: 'monospace' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Build: {BUILD_VERSION}</span>
-          </div>
-          {debugInfo && (
-            <div style={{ marginTop: '4px', fontSize: '10px', color: '#78716c' }}>
-              DB: {debugInfo}
-            </div>
-          )}
+        {/* Nuke Button (for testing) */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
           <button
             onClick={async () => {
               if (!confirm('⚠️ NUKE ALL INVENTORY DATA?\n\nThis will delete:\n- All inventory movements\n- All purchase items\n- All purchases\n\nProducts will NOT be deleted.')) return;
