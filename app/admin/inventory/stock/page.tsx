@@ -482,8 +482,8 @@ export default function StockPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ color: '#6b7280', fontSize: '12px' }}>{expandedProducts.has(inv.product.id) ? '▼' : '▶'}</span>
                       <div>
-                        {inv.product.brand && <span style={{ color: '#FF580F', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>{inv.product.brand} </span>}
-                        <span style={{ fontWeight: 500 }}>{inv.product.name}</span>
+                        <div style={{ fontWeight: 500 }}>{inv.product.name}</div>
+                        {inv.product.brand && <div style={{ color: '#FF580F', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>{inv.product.brand}</div>}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', fontWeight: 600, color: '#FF580F' }}>
