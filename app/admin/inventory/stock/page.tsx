@@ -469,7 +469,7 @@ export default function StockPage() {
     }
   };
 
-  const formatExpDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const formatExpDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const formatPurchaseDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const getDaysLabel = (days: number | null) => {
     if (days === null) return '';
