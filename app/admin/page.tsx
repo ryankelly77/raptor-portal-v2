@@ -9,7 +9,7 @@ import styles from './admin.module.css';
 // Navigation items
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
-  { href: '/admin/projects', label: 'Projects', icon: 'projects' },
+  { href: '/admin/projects', label: 'Installs', icon: 'projects' },
   { href: '/admin/property-managers', label: 'Property Managers', icon: 'users' },
   { href: '/admin/inventory', label: 'Inventory', icon: 'inventory' },
   { href: '/admin/messages', label: 'Messages', icon: 'messages', badge: 0 },
