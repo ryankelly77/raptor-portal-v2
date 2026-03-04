@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { isNonEmptyString } from '@/lib/validators';
 import { createAdminToken } from '@/lib/auth/jwt';
+import { getAdminClient } from '@/lib/supabase/admin';
+import type { Admin } from '@/types/database';
 
 // Rate limiting store
 interface RateLimitRecord {
@@ -77,14 +80,14 @@ export async function POST(request: NextRequest) {
   }
 
   // Input validation
-  let body: { password?: string };
+  let body: { email?: string; password?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { password } = body;
+  const { email, password } = body;
   if (!isNonEmptyString(password)) {
     return NextResponse.json({ error: 'Password is required' }, { status: 400 });
   }
@@ -94,6 +97,70 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid password' }, { status: 400 });
   }
 
+  // If email is provided, authenticate against the admins table
+  if (email && isNonEmptyString(email)) {
+    try {
+      const supabase = getAdminClient();
+
+      // Look up admin by email
+      const { data: admin, error } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .eq('is_active', true)
+        .single();
+
+      if (error || !admin) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      }
+
+      const typedAdmin = admin as Admin;
+
+      // Verify password with bcrypt
+      const isValidPassword = await bcrypt.compare(password, typedAdmin.password_hash);
+      if (!isValidPassword) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      }
+
+      // Update last_login timestamp
+      await supabase
+        .from('admins')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', typedAdmin.id);
+
+      // Generate token with admin details
+      const token = createAdminToken({
+        adminId: typedAdmin.id,
+        email: typedAdmin.email,
+        name: typedAdmin.name,
+        role: typedAdmin.role,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          token,
+          expiresIn: '8h',
+          admin: {
+            id: typedAdmin.id,
+            email: typedAdmin.email,
+            name: typedAdmin.name,
+            role: typedAdmin.role,
+          },
+        },
+        {
+          headers: {
+            'X-RateLimit-Remaining': String(rateLimit.remaining),
+          },
+        }
+      );
+    } catch (err) {
+      console.error('Database auth error:', err);
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
+    }
+  }
+
+  // Legacy: password-only authentication using environment variable
   // Constant-time comparison to prevent timing attacks
   const passwordBuffer = Buffer.from(password);
   const adminPasswordBuffer = Buffer.from(ADMIN_PASSWORD);

@@ -2,10 +2,18 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 
+interface AdminInfo {
+  id?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+}
+
 interface AdminAuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (password: string) => Promise<{ success: boolean; error?: string }>;
+  adminInfo: AdminInfo | null;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -14,23 +22,32 @@ const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefin
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [adminInfo, setAdminInfo] = useState<AdminInfo | null>(null);
 
   // Check session storage on mount
   useEffect(() => {
     const authStatus = sessionStorage.getItem('adminAuth');
     const token = sessionStorage.getItem('adminToken');
+    const storedAdminInfo = sessionStorage.getItem('adminInfo');
     if (authStatus === 'true' && token) {
       setIsAuthenticated(true);
+      if (storedAdminInfo) {
+        try {
+          setAdminInfo(JSON.parse(storedAdminInfo));
+        } catch {
+          // Ignore parse errors
+        }
+      }
     }
     setIsLoading(false);
   }, []);
 
-  const login = useCallback(async (password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch('/api/admin-auth', {
+      const response = await fetch('/api/admin/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email: email || undefined, password }),
       });
 
       const result = await response.json();
@@ -38,10 +55,14 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       if (response.ok && result.success) {
         sessionStorage.setItem('adminAuth', 'true');
         sessionStorage.setItem('adminToken', result.token);
+        if (result.admin) {
+          sessionStorage.setItem('adminInfo', JSON.stringify(result.admin));
+          setAdminInfo(result.admin);
+        }
         setIsAuthenticated(true);
         return { success: true };
       } else {
-        return { success: false, error: result.error || 'Invalid password' };
+        return { success: false, error: result.error || 'Invalid credentials' };
       }
     } catch {
       return { success: false, error: 'Authentication failed' };
@@ -51,11 +72,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     sessionStorage.removeItem('adminAuth');
     sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminInfo');
     setIsAuthenticated(false);
+    setAdminInfo(null);
   }, []);
 
   return (
-    <AdminAuthContext.Provider value={{ isAuthenticated, isLoading, login, logout }}>
+    <AdminAuthContext.Provider value={{ isAuthenticated, isLoading, adminInfo, login, logout }}>
       {children}
     </AdminAuthContext.Provider>
   );

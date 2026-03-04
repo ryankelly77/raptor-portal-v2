@@ -1,8 +1,4 @@
-/* ============================================
-   DRIVER LOGIN PAGE STYLES
-   ============================================ */
-
-.loginPage {
+.page {
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -13,9 +9,9 @@
   background: linear-gradient(135deg, #f5f5f5 0%, #e5e7eb 100%);
 }
 
-.loginContainer {
+.container {
   width: 100%;
-  max-width: 380px;
+  max-width: 420px;
   background: #fff;
   border-radius: 16px;
   padding: 40px 32px;
@@ -42,64 +38,32 @@
   margin: 0 0 24px 0;
 }
 
-/* ============================================
-   LOGIN METHOD TABS
-   ============================================ */
-
-.tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-
-.tab {
-  flex: 1;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 500;
+.emailNote {
+  font-size: 13px;
   color: #6b7280;
-  background: #f3f4f6;
-  border: none;
+  margin: 0 0 24px 0;
+  padding: 12px;
+  background: #f9fafb;
   border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab:hover {
-  background: #e5e7eb;
-}
-
-.tabActive {
-  color: #ea580c;
-  background: #fff7ed;
-}
-
-.message {
-  background: #f0fdf4;
-  color: #15803d;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  text-align: left;
-  margin-bottom: 16px;
 }
 
 .form {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.inputGroup {
   text-align: left;
 }
 
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .label {
-  display: block;
   font-size: 14px;
   font-weight: 500;
   color: #374151;
-  margin-bottom: 6px;
 }
 
 .input {
@@ -122,14 +86,6 @@
   color: #9ca3af;
 }
 
-.codeInput {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: 8px;
-  text-align: center;
-  font-family: monospace;
-}
-
 .error {
   background: #fef2f2;
   color: #dc2626;
@@ -139,7 +95,7 @@
   text-align: left;
 }
 
-.submitBtn {
+.primaryBtn {
   width: 100%;
   padding: 14px 24px;
   font-size: 16px;
@@ -153,59 +109,22 @@
   margin-top: 8px;
 }
 
-.submitBtn:hover {
+.primaryBtn:hover {
   background: #c2410c;
 }
 
-.submitBtn:disabled {
+.primaryBtn:disabled {
   background: #fdba74;
   cursor: not-allowed;
 }
 
-.backBtn {
-  width: 100%;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #6b7280;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.backBtn:hover {
-  color: #374151;
-}
-
-.footer {
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid #e5e7eb;
-  font-size: 13px;
-  color: #9ca3af;
-}
-
-.footer a {
-  color: #ea580c;
-  text-decoration: none;
-}
-
-.footer a:hover {
-  text-decoration: underline;
-}
-
-/* ============================================
-   LOADING STATE
-   ============================================ */
-
+/* Loading state */
 .loading {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
   gap: 16px;
+  padding: 40px;
 }
 
 .spinner {
@@ -219,4 +138,58 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Success box */
+.successBox {
+  text-align: center;
+}
+
+.successBox h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #16a34a;
+  margin: 0 0 12px 0;
+}
+
+.successBox p {
+  font-size: 14px;
+  color: #374151;
+  margin: 0 0 16px 0;
+}
+
+.token {
+  display: block;
+  padding: 16px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  font-size: 18px;
+  font-family: monospace;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+
+.helpText {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 16px 0;
+}
+
+/* Error box */
+.errorBox {
+  text-align: center;
+}
+
+.errorBox h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #dc2626;
+  margin: 0 0 12px 0;
+}
+
+.errorBox p {
+  font-size: 14px;
+  color: #374151;
+  margin: 0 0 16px 0;
 }

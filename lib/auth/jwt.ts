@@ -15,6 +15,10 @@ const DRIVER_JWT_EXPIRATION = '4h';
 
 export interface AdminTokenPayload {
   type: 'admin';
+  adminId?: string;
+  email?: string;
+  name?: string;
+  role?: string;
   iat: number;
   exp: number;
 }
@@ -29,8 +33,25 @@ export interface DriverTokenPayload {
 
 export type TokenPayload = AdminTokenPayload | DriverTokenPayload;
 
-export function createAdminToken(): string {
-  return jwt.sign({ type: 'admin' }, getJwtSecret(), { expiresIn: JWT_EXPIRATION });
+export interface AdminTokenData {
+  adminId?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+}
+
+export function createAdminToken(data?: AdminTokenData): string {
+  return jwt.sign(
+    {
+      type: 'admin',
+      ...(data?.adminId && { adminId: data.adminId }),
+      ...(data?.email && { email: data.email }),
+      ...(data?.name && { name: data.name }),
+      ...(data?.role && { role: data.role }),
+    },
+    getJwtSecret(),
+    { expiresIn: JWT_EXPIRATION }
+  );
 }
 
 export function verifyAdminToken(token: string): AdminTokenPayload | null {
@@ -41,7 +62,15 @@ export function verifyAdminToken(token: string): AdminTokenPayload | null {
     if (!isAdmin) {
       return null;
     }
-    return { type: 'admin', iat: decoded.iat as number, exp: decoded.exp as number };
+    return {
+      type: 'admin',
+      adminId: decoded.adminId as string | undefined,
+      email: decoded.email as string | undefined,
+      name: decoded.name as string | undefined,
+      role: decoded.role as string | undefined,
+      iat: decoded.iat as number,
+      exp: decoded.exp as number,
+    };
   } catch {
     return null;
   }

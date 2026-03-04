@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAdminAuth } from '@/lib/contexts/AdminAuthContext';
 import styles from '../admin.module.css';
 
-// Navigation items - INVENTORY IS HERE (item 5)
+// Navigation items
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'dashboard' },
   { href: '/admin/projects', label: 'Installs', icon: 'projects' },
@@ -17,6 +17,8 @@ const navItems = [
   { href: '/admin/templates', label: 'Email Templates', icon: 'templates' },
   { href: '/admin/activity', label: 'Activity Log', icon: 'activity' },
   { href: '/admin/temperature', label: 'Temp Logs', icon: 'temperature' },
+  { href: '/admin/users', label: 'Admin Users', icon: 'admin-users' },
+  { href: '/admin/drivers', label: 'Drivers', icon: 'truck' },
   { href: '/admin/migrations', label: 'Migrations', icon: 'database' },
 ];
 
@@ -93,6 +95,22 @@ function NavIcon({ name }: { name: string }) {
           <ellipse cx="12" cy="5" rx="9" ry="3" />
           <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
           <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+        </svg>
+      );
+    case 'admin-users':
+      return (
+        <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 4.354a4 4 0 1 1 0 5.292M15 21H3v-1a6 6 0 0 1 12 0v1zm0 0h6v-1a6 6 0 0 0-9-5.197M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z" />
+        </svg>
+      );
+    case 'truck':
+      return (
+        <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="1" y="3" width="15" height="13" rx="1" />
+          <path d="M16 8h4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-1" />
+          <path d="M16 17h-1" />
+          <circle cx="5.5" cy="18.5" r="2.5" />
+          <circle cx="18.5" cy="18.5" r="2.5" />
         </svg>
       );
     default:

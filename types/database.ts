@@ -246,6 +246,44 @@ export interface EmailTemplate {
   updated_at: string;
 }
 
+// Admin authentication types
+export type AdminRole = 'super_admin' | 'admin';
+
+export interface Admin {
+  id: string;
+  email: string;
+  password_hash: string;
+  name: string;
+  role: AdminRole;
+  is_active: boolean;
+  last_login: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type UserInviteType = 'admin' | 'driver';
+
+export interface UserInvite {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  user_type: UserInviteType;
+  token: string;
+  created_by: string | null;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface DriverLoginToken {
+  id: string;
+  driver_id: string;
+  token: string;
+  expires_at: string;
+  used_at: string | null;
+  created_at: string;
+}
+
 // Extended types with relations
 export interface ProjectWithRelations extends Project {
   property?: Property;
@@ -275,6 +313,9 @@ export type EquipmentInsert = Pick<Equipment, 'project_id' | 'name'> & Partial<O
 export type DriverInsert = Pick<Driver, 'name'> & Partial<Omit<Driver, 'id' | 'created_at' | 'updated_at' | 'name'>>;
 export type GlobalDocumentInsert = Pick<GlobalDocument, 'label'> & Partial<Omit<GlobalDocument, 'id' | 'created_at' | 'updated_at' | 'label'>>;
 export type EmailTemplateInsert = Pick<EmailTemplate, 'name'> & Partial<Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at' | 'name'>>;
+export type AdminInsert = Pick<Admin, 'email' | 'password_hash' | 'name'> & Partial<Omit<Admin, 'id' | 'created_at' | 'updated_at' | 'email' | 'password_hash' | 'name'>>;
+export type UserInviteInsert = Pick<UserInvite, 'user_type' | 'token' | 'expires_at'> & Partial<Omit<UserInvite, 'id' | 'created_at' | 'user_type' | 'token' | 'expires_at'>>;
+export type DriverLoginTokenInsert = Pick<DriverLoginToken, 'driver_id' | 'token' | 'expires_at'> & Partial<Omit<DriverLoginToken, 'id' | 'created_at' | 'driver_id' | 'token' | 'expires_at'>>;
 
 // Update types (all fields optional except id)
 export type PropertyManagerUpdate = Partial<Omit<PropertyManager, 'id' | 'created_at' | 'updated_at'>>;
@@ -287,3 +328,6 @@ export type EquipmentUpdate = Partial<Omit<Equipment, 'id' | 'created_at' | 'upd
 export type DriverUpdate = Partial<Omit<Driver, 'id' | 'created_at' | 'updated_at'>>;
 export type GlobalDocumentUpdate = Partial<Omit<GlobalDocument, 'id' | 'created_at' | 'updated_at'>>;
 export type EmailTemplateUpdate = Partial<Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at'>>;
+export type AdminUpdate = Partial<Omit<Admin, 'id' | 'created_at' | 'updated_at'>>;
+export type UserInviteUpdate = Partial<Omit<UserInvite, 'id' | 'created_at'>>;
+export type DriverLoginTokenUpdate = Partial<Omit<DriverLoginToken, 'id' | 'created_at'>>;

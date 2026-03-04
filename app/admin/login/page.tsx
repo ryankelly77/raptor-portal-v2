@@ -6,6 +6,7 @@ import { useAdminAuth } from '@/lib/contexts/AdminAuthContext';
 import styles from '../admin.module.css';
 
 export default function AdminLoginPage() {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,12 +25,12 @@ export default function AdminLoginPage() {
     setError('');
     setIsSubmitting(true);
 
-    const result = await login(password);
+    const result = await login(email, password);
 
     if (result.success) {
       router.replace('/admin');
     } else {
-      setError(result.error || 'Invalid password');
+      setError(result.error || 'Invalid credentials');
       setIsSubmitting(false);
     }
   };
@@ -54,10 +55,27 @@ export default function AdminLoginPage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-dark.png" alt="Raptor Vending" className={styles.loginLogo} />
         <h1 className={styles.loginTitle}>Admin Portal</h1>
-        <p className={styles.loginSubtitle}>Enter your password to continue</p>
+        <p className={styles.loginSubtitle}>Enter your credentials to continue</p>
 
         <form onSubmit={handleSubmit} className={styles.loginForm}>
           {error && <div className={styles.errorMessage}>{error}</div>}
+
+          <div className={styles.formGroup}>
+            <label htmlFor="email" className={styles.formLabel}>
+              Email (optional)
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={styles.formInput}
+              placeholder="admin@example.com"
+              autoComplete="email"
+              autoFocus
+              disabled={isSubmitting}
+            />
+          </div>
 
           <div className={styles.formGroup}>
             <label htmlFor="password" className={styles.formLabel}>
@@ -69,9 +87,8 @@ export default function AdminLoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={`${styles.formInput} ${error ? styles.formInputError : ''}`}
-              placeholder="Enter admin password"
+              placeholder="Enter password"
               autoComplete="current-password"
-              autoFocus
               disabled={isSubmitting}
             />
           </div>
