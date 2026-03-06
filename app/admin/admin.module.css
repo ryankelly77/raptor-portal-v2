@@ -559,6 +559,38 @@
   display: block;
 }
 
+/* Mobile Actions - hidden on desktop */
+.mobileActions {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.mobileActionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 60px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+}
+
+.mobileActionBtn svg {
+  flex-shrink: 0;
+}
+
+/* Desktop only content */
+.desktopOnly {
+  display: block;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar {
@@ -591,6 +623,16 @@
 
   .loginBox {
     padding: 32px 24px;
+  }
+
+  /* Show mobile actions on mobile */
+  .mobileActions {
+    display: flex;
+  }
+
+  /* Hide desktop-only content on mobile */
+  .desktopOnly {
+    display: none;
   }
 }
 

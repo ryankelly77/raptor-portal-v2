@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireDriver, DriverTokenPayload } from '@/lib/auth/jwt';
+import { requireDriver, DriverTokenPayload, verifyAdminToken, extractToken, AdminTokenPayload } from '@/lib/auth/jwt';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 interface TempLogRequest {
@@ -9,13 +9,29 @@ interface TempLogRequest {
 }
 
 export async function POST(request: NextRequest) {
-  // Authenticate driver
-  const auth = requireDriver(request);
-  if (!auth.authorized) {
-    return NextResponse.json({ error: auth.error }, { status: 401 });
-  }
+  // Try driver auth first, then admin auth
+  let driverId: string;
+  let isAdmin = false;
 
-  const driverId = (auth.payload as DriverTokenPayload).driverId;
+  const driverAuth = requireDriver(request);
+  if (driverAuth.authorized) {
+    driverId = (driverAuth.payload as DriverTokenPayload).driverId;
+  } else {
+    // Try admin auth
+    const token = extractToken(request);
+    if (!token) {
+      return NextResponse.json({ error: 'No authorization token provided' }, { status: 401 });
+    }
+
+    const adminPayload = verifyAdminToken(token);
+    if (!adminPayload) {
+      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    }
+
+    // For admins, use their adminId or a special identifier
+    driverId = `admin:${adminPayload.adminId || adminPayload.email || 'admin'}`;
+    isAdmin = true;
+  }
 
   let supabase: ReturnType<typeof getAdminClient>;
   try {

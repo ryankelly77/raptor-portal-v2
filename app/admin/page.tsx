@@ -500,51 +500,72 @@ export default function AdminDashboard() {
             </Link>
           </div>
 
-          {/* Installs Section */}
-          <div className={styles.sectionHeader}>
-            <h2>Installs</h2>
-            <Link href="/admin/projects" className={styles.btnPrimary}>
-              + New Install
+          {/* Mobile Action Buttons - visible only on mobile */}
+          <div className={styles.mobileActions}>
+            <Link href="/admin/inventory/receive" className={styles.mobileActionBtn} style={{ background: '#FF580F' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                <line x1="12" y1="22.08" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" y2="16" />
+                <polyline points="8 14 12 18 16 14" />
+              </svg>
+              <span>Receive Inventory</span>
+            </Link>
+            <Link href="/admin/temp-log" className={styles.mobileActionBtn} style={{ background: '#202020' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+              </svg>
+              <span>Track Temp</span>
             </Link>
           </div>
 
-          {loading ? (
-            <div className={styles.loadingContainer}>
-              <div className={styles.loadingSpinner} />
+          {/* Installs Section - hidden on mobile */}
+          <div className={styles.desktopOnly}>
+            <div className={styles.sectionHeader}>
+              <h2>Installs</h2>
+              <Link href="/admin/projects" className={styles.btnPrimary}>
+                + New Install
+              </Link>
             </div>
-          ) : projects.length === 0 ? (
-            <div className={styles.emptyState}>
-              <p>No installs yet. Create your first install to get started.</p>
-            </div>
-          ) : (
-            <div className={styles.projectsGrid}>
-              {projects.map((project) => {
-                const { location, property, pm } = getLocationInfo(project);
-                return (
-                  <Link
-                    key={project.id}
-                    href={`/admin/projects/${project.id}`}
-                    className={styles.projectCard}
-                  >
-                    <div className={styles.projectCardHeader}>
-                      <span className={styles.projectNumber}>{project.project_number || 'No #'}</span>
-                      <span className={`${styles.statusBadge} ${project.is_active ? styles.active : styles.inactive}`}>
-                        {project.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                    <div className={styles.projectCardBody}>
-                      <h3>{property?.name || 'Unknown Property'}</h3>
-                      <p>{location?.name || 'Unknown Location'}</p>
-                      {pm && <p className={styles.projectPM}>PM: {pm.name}</p>}
-                      <div className={styles.projectProgress}>
-                        <div className={styles.progressBarMini}>
-                          <div
-                            className={styles.progressFill}
-                            style={{ width: `${project.overall_progress ?? 0}%` }}
-                          />
-                        </div>
-                        <span>{project.overall_progress ?? 0}%</span>
+
+            {loading ? (
+              <div className={styles.loadingContainer}>
+                <div className={styles.loadingSpinner} />
+              </div>
+            ) : projects.length === 0 ? (
+              <div className={styles.emptyState}>
+                <p>No installs yet. Create your first install to get started.</p>
+              </div>
+            ) : (
+              <div className={styles.projectsGrid}>
+                {projects.map((project) => {
+                  const { location, property, pm } = getLocationInfo(project);
+                  return (
+                    <Link
+                      key={project.id}
+                      href={`/admin/projects/${project.id}`}
+                      className={styles.projectCard}
+                    >
+                      <div className={styles.projectCardHeader}>
+                        <span className={styles.projectNumber}>{project.project_number || 'No #'}</span>
+                        <span className={`${styles.statusBadge} ${project.is_active ? styles.active : styles.inactive}`}>
+                          {project.is_active ? 'Active' : 'Inactive'}
+                        </span>
                       </div>
+                      <div className={styles.projectCardBody}>
+                        <h3>{property?.name || 'Unknown Property'}</h3>
+                        <p>{location?.name || 'Unknown Location'}</p>
+                        {pm && <p className={styles.projectPM}>PM: {pm.name}</p>}
+                        <div className={styles.projectProgress}>
+                          <div className={styles.progressBarMini}>
+                            <div
+                              className={styles.progressFill}
+                              style={{ width: `${project.overall_progress ?? 0}%` }}
+                            />
+                          </div>
+                          <span>{project.overall_progress ?? 0}%</span>
+                        </div>
                     </div>
                     <div className={styles.projectCardFooter}>
                       <span className={styles.tokenDisplay}>Token: {project.public_token}</span>
@@ -554,6 +575,7 @@ export default function AdminDashboard() {
               })}
             </div>
           )}
+          </div>
         </div>
       </main>
     </div>
