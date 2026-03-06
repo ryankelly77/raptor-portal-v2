@@ -698,7 +698,7 @@ export default function ReceiptsPage() {
                           </td>
                           <td style={{ padding: '10px 12px', fontSize: '12px', color: '#6b7280' }}>
                             {tx.batchDate && tx.batchStore ? (
-                              <span>{formatDateShort(tx.batchDate)} {tx.batchStore}</span>
+                              <span>{formatDate(tx.batchDate)} {tx.batchStore}</span>
                             ) : '—'}
                           </td>
                         </tr>
