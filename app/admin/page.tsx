@@ -19,7 +19,6 @@ const navItems = [
   { href: '/admin/temperature', label: 'Temp Logs', icon: 'temperature' },
   { href: '/admin/users', label: 'Admin Users', icon: 'admin-users' },
   { href: '/admin/drivers', label: 'Drivers', icon: 'truck' },
-  { href: '/admin/migrations', label: 'Migrations', icon: 'database' },
   { href: '/admin/settings', label: 'Settings', icon: 'settings' },
 ];
 
@@ -50,6 +49,12 @@ interface PropertyManager {
   id: string;
   name: string;
   company: string | null;
+}
+
+interface InventoryStats {
+  totalOnHand: number;
+  totalValue: number;
+  productCount: number;
 }
 
 // Icons component
@@ -119,14 +124,6 @@ function NavIcon({ name }: { name: string }) {
           <line x1="12" y1="22.08" x2="12" y2="12" />
         </svg>
       );
-    case 'database':
-      return (
-        <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <ellipse cx="12" cy="5" rx="9" ry="3" />
-          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-        </svg>
-      );
     case 'admin-users':
       return (
         <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -174,11 +171,16 @@ export default function AdminDashboard() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [managers, setManagers] = useState<PropertyManager[]>([]);
+  const [inventoryStats, setInventoryStats] = useState<InventoryStats>({
+    totalOnHand: 0,
+    totalValue: 0,
+    productCount: 0,
+  });
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [projectsRes, propertiesRes, locationsRes, managersRes] = await Promise.all([
+      const [projectsRes, propertiesRes, locationsRes, managersRes, movementsRes, purchaseItemsRes, productsRes] = await Promise.all([
         fetch('/api/admin/crud', {
           method: 'POST',
           headers: getAuthHeaders(),
@@ -199,19 +201,112 @@ export default function AdminDashboard() {
           headers: getAuthHeaders(),
           body: JSON.stringify({ table: 'property_managers', action: 'read' }),
         }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'inventory_movements', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'inventory_purchase_items', action: 'read' }),
+        }),
+        fetch('/api/admin/crud', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ table: 'products', action: 'read' }),
+        }),
       ]);
 
-      const [projectsData, propertiesData, locationsData, managersData] = await Promise.all([
+      const [projectsData, propertiesData, locationsData, managersData, movementsData, purchaseItemsData, productsData] = await Promise.all([
         projectsRes.json(),
         propertiesRes.json(),
         locationsRes.json(),
         managersRes.json(),
+        movementsRes.json(),
+        purchaseItemsRes.json(),
+        productsRes.json(),
       ]);
 
       setProjects(projectsData.data || []);
       setProperties(propertiesData.data || []);
       setLocations(locationsData.data || []);
       setManagers(managersData.data || []);
+
+      // Calculate inventory stats from movements
+      const movements = movementsData.data || [];
+      const purchaseItems = purchaseItemsData.data || [];
+      const products = productsData.data || [];
+
+      // Build maps for lookups
+      type PurchaseItem = { id: string; product_id: string; unit_cost: number | null };
+      const purchaseItemsByProduct = new Map<string, PurchaseItem[]>();
+      for (const pi of purchaseItems) {
+        const existing = purchaseItemsByProduct.get(pi.product_id) || [];
+        existing.push(pi);
+        purchaseItemsByProduct.set(pi.product_id, existing);
+      }
+
+      // Calculate on-hand per product from movements
+      // On-hand = purchase_in - restock_out - shrinkage
+      const purchasedByProduct = new Map<string, number>();
+      const restockedOutByProduct = new Map<string, number>();
+      const shrinkageByProduct = new Map<string, number>();
+
+      for (const m of movements) {
+        const productId = m.product_id;
+        const qty = Math.abs(m.quantity);
+
+        switch (m.movement_type) {
+          case 'purchase_in':
+            purchasedByProduct.set(productId, (purchasedByProduct.get(productId) || 0) + qty);
+            break;
+          case 'restock_out':
+            restockedOutByProduct.set(productId, (restockedOutByProduct.get(productId) || 0) + qty);
+            break;
+          case 'shrinkage':
+            shrinkageByProduct.set(productId, (shrinkageByProduct.get(productId) || 0) + qty);
+            break;
+        }
+      }
+
+      // Calculate totals
+      let totalOnHand = 0;
+      let totalValue = 0;
+      let productCount = 0;
+
+      for (const product of products) {
+        const purchased = purchasedByProduct.get(product.id) || 0;
+        const restockedOut = restockedOutByProduct.get(product.id) || 0;
+        const shrinkage = shrinkageByProduct.get(product.id) || 0;
+        const onHand = purchased - restockedOut - shrinkage;
+
+        if (onHand > 0) {
+          totalOnHand += onHand;
+          productCount++;
+
+          // Calculate value using average unit cost from purchase items
+          const productPurchaseItems = purchaseItemsByProduct.get(product.id) || [];
+          let totalCost = 0;
+          let costCount = 0;
+          for (const pi of productPurchaseItems) {
+            if (pi.unit_cost) {
+              totalCost += pi.unit_cost;
+              costCount++;
+            }
+          }
+          if (costCount > 0) {
+            const avgCost = totalCost / costCount;
+            totalValue += onHand * avgCost;
+          }
+        }
+      }
+
+      setInventoryStats({
+        totalOnHand,
+        totalValue: Math.round(totalValue * 100) / 100,
+        productCount,
+      });
     } catch (err) {
       console.error('Error loading dashboard data:', err);
     } finally {
@@ -249,7 +344,6 @@ export default function AdminDashboard() {
 
   // Calculate stats
   const activeProjects = projects.filter((p) => p.is_active).length;
-  const completedProjects = projects.filter((p) => p.overall_progress === 100).length;
 
   // Show loading while checking auth
   if (isLoading) {
@@ -335,22 +429,75 @@ export default function AdminDashboard() {
         <div className={styles.pageContent}>
           {/* Stats Grid */}
           <div className={styles.dashboardGrid}>
-            <div className={styles.statCard}>
-              <p className={styles.statLabel}>Active Installs</p>
-              <p className={styles.statValue}>{loading ? '--' : activeProjects}</p>
-            </div>
-            <div className={styles.statCard}>
-              <p className={styles.statLabel}>Completed</p>
-              <p className={styles.statValue}>{loading ? '--' : completedProjects}</p>
-            </div>
-            <div className={styles.statCard}>
-              <p className={styles.statLabel}>Properties</p>
-              <p className={styles.statValue}>{loading ? '--' : properties.length}</p>
-            </div>
-            <div className={styles.statCard}>
-              <p className={styles.statLabel}>Property Managers</p>
-              <p className={styles.statValue}>{loading ? '--' : managers.length}</p>
-            </div>
+            {/* Active Installs */}
+            <Link href="/admin/projects" className={styles.statCard} style={{ textDecoration: 'none', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <p className={styles.statLabel}>Active Installs</p>
+                  <p className={styles.statValue}>{loading ? '--' : activeProjects}</p>
+                </div>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
+
+            {/* Properties */}
+            <Link href="/admin/property-managers" className={styles.statCard} style={{ textDecoration: 'none', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <p className={styles.statLabel}>Properties</p>
+                  <p className={styles.statValue}>{loading ? '--' : properties.length}</p>
+                </div>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
+
+            {/* Inventory On-Hand */}
+            <Link href="/admin/inventory/stock" className={styles.statCard} style={{ textDecoration: 'none', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <p className={styles.statLabel}>Inventory On-Hand</p>
+                  <p className={styles.statValue} style={{ color: '#FF580F' }}>{loading ? '--' : inventoryStats.totalOnHand}</p>
+                  <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    {loading ? '' : `${inventoryStats.productCount} products · $${inventoryStats.totalValue.toFixed(2)} value`}
+                  </p>
+                </div>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF580F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                    <line x1="12" y1="22.08" x2="12" y2="12" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
+
+            {/* Revenue - TODO: Replace with actual revenue from sales_records once sales import is built */}
+            <Link href="/admin/inventory/receipts" className={styles.statCard} style={{ textDecoration: 'none', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <p className={styles.statLabel}>Revenue</p>
+                  <p className={styles.statValue} style={{ color: '#16a34a' }}>$0.00</p>
+                  <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    Sales tracking coming soon
+                  </p>
+                </div>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
           </div>
 
           {/* Installs Section */}
