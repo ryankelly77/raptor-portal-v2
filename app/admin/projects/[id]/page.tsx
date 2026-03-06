@@ -165,7 +165,9 @@ interface PhaseWithTasks extends Phase {
 }
 
 export default function ProjectEditorPage() {
-  const { isAuthenticated, isLoading: authLoading, logout } = useAdminAuth();
+  const { isAuthenticated, isLoading: authLoading, logout, adminInfo } = useAdminAuth();
+  const firstName = adminInfo?.name?.split(' ')[0] || 'Admin';
+  const initial = firstName.charAt(0).toUpperCase();
   const router = useRouter();
   const params = useParams();
   const projectId = params.id as string;
@@ -502,8 +504,8 @@ export default function ProjectEditorPage() {
           </div>
           <div className={adminStyles.topbarRight}>
             <div className={adminStyles.userInfo}>
-              <div className={adminStyles.userAvatar}>A</div>
-              <span>Admin</span>
+              <div className={adminStyles.userAvatar}>{initial}</div>
+              <span>{firstName}</span>
             </div>
           </div>
         </header>

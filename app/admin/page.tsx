@@ -161,7 +161,9 @@ function getAuthHeaders(): HeadersInit {
 }
 
 export default function AdminDashboard() {
-  const { isAuthenticated, isLoading, logout } = useAdminAuth();
+  const { isAuthenticated, isLoading, logout, adminInfo } = useAdminAuth();
+  const firstName = adminInfo?.name?.split(' ')[0] || 'Admin';
+  const initial = firstName.charAt(0).toUpperCase();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -419,8 +421,8 @@ export default function AdminDashboard() {
           </div>
           <div className={styles.topbarRight}>
             <div className={styles.userInfo}>
-              <div className={styles.userAvatar}>A</div>
-              <span>Admin</span>
+              <div className={styles.userAvatar}>{initial}</div>
+              <span>{firstName}</span>
             </div>
           </div>
         </header>
