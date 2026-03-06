@@ -194,8 +194,7 @@ export default function StockPage() {
         // purchaseItem.quantity is PACKAGES, convert to units for calculation
         const unitsPerPkg = product.units_per_package || 1;
         const totalUnitsReceived = purchaseItem.quantity * unitsPerPkg;
-        const remainingQty = totalUnitsReceived - restockedQty - discardedQty;
-        if (remainingQty <= 0) continue;
+        const remainingQty = Math.max(0, totalUnitsReceived - restockedQty - discardedQty);
 
         let daysUntilExpiry: number | null = null;
         let expirationStatus: 'critical' | 'warning' | 'ok' | null = null;
@@ -234,7 +233,7 @@ export default function StockPage() {
         batchesByProduct.set(product.id, existing);
       }
 
-      // Sort batches FIFO and mark oldest
+      // Sort batches FIFO and mark oldest (only if it has remaining qty)
       for (const [, batches] of batchesByProduct) {
         batches.sort((a, b) => {
           if (a.expirationDate && b.expirationDate) {
@@ -244,7 +243,9 @@ export default function StockPage() {
           else if (b.expirationDate) return 1;
           return new Date(a.purchaseItem.created_at).getTime() - new Date(b.purchaseItem.created_at).getTime();
         });
-        if (batches.length > 0) batches[0].isOldest = true;
+        // Mark the first batch with remaining qty as oldest
+        const firstWithQty = batches.find(b => b.remainingQty > 0);
+        if (firstWithQty) firstWithQty.isOldest = true;
       }
 
       // Build product inventory
@@ -616,10 +617,14 @@ export default function StockPage() {
                   {expandedProducts.has(inv.product.id) && (
                     <div style={{ background: '#f9fafb', padding: '0 12px 12px' }}>
                       {inv.batches.map((batch, idx) => (
-                        <div key={batch.purchaseItem.id} style={{ background: '#fff', border: batch.isOldest ? '2px solid #22c55e' : '1px solid #e5e7eb', borderRadius: '8px', padding: '12px', marginTop: '8px' }}>
-                          {batch.isOldest && (
+                        <div key={batch.purchaseItem.id} style={{ background: batch.remainingQty === 0 ? '#f9fafb' : '#fff', border: batch.isOldest && batch.remainingQty > 0 ? '2px solid #22c55e' : '1px solid #e5e7eb', borderRadius: '8px', padding: '12px', marginTop: '8px', opacity: batch.remainingQty === 0 ? 0.7 : 1 }}>
+                          {batch.remainingQty === 0 ? (
+                            <div style={{ background: '#f3f4f6', color: '#6b7280', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, marginBottom: '8px', display: 'inline-block' }}>
+                              DEPLETED
+                            </div>
+                          ) : batch.isOldest && (
                             <div style={{ background: '#dcfce7', color: '#16a34a', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, marginBottom: '8px', display: 'inline-block' }}>
-                              📦 STOCK THIS FIRST
+                              STOCK THIS FIRST
                             </div>
                           )}
                           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
@@ -646,15 +651,17 @@ export default function StockPage() {
                               )}
                             </div>
                           </div>
-                          {/* Actions */}
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-                            <button onClick={(e) => { e.stopPropagation(); setActionBatch(batch); setActionQty(String(batch.remainingQty)); setActionDestination(''); }} style={{ padding: '8px 16px', background: batch.isOldest ? '#FF580F' : '#f3f4f6', color: batch.isOldest ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
-                              Move ▸
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); openEditBatch(batch); }} style={{ padding: '8px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-                              Edit
-                            </button>
-                          </div>
+                          {/* Actions - only show if batch has remaining quantity */}
+                          {batch.remainingQty > 0 && (
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                              <button onClick={(e) => { e.stopPropagation(); setActionBatch(batch); setActionQty(String(batch.remainingQty)); setActionDestination(''); }} style={{ padding: '8px 16px', background: batch.isOldest ? '#FF580F' : '#f3f4f6', color: batch.isOldest ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
+                                Move
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); openEditBatch(batch); }} style={{ padding: '8px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                                Edit
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
