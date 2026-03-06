@@ -132,7 +132,9 @@ interface AdminShellProps {
 }
 
 export function AdminShell({ children, title }: AdminShellProps) {
-  const { isAuthenticated, isLoading, logout } = useAdminAuth();
+  const { isAuthenticated, isLoading, logout, adminInfo } = useAdminAuth();
+  const firstName = adminInfo?.name?.split(' ')[0] || 'Admin';
+  const initial = firstName.charAt(0).toUpperCase();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -225,8 +227,8 @@ export function AdminShell({ children, title }: AdminShellProps) {
           </div>
           <div className={styles.topbarRight}>
             <div className={styles.userInfo}>
-              <div className={styles.userAvatar}>A</div>
-              <span>Admin</span>
+              <div className={styles.userAvatar}>{initial}</div>
+              <span>{firstName}</span>
             </div>
           </div>
         </header>
