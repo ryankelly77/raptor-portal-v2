@@ -1,14 +1,12 @@
-const CACHE_NAME = 'raptor-portal-v2';
+const CACHE_NAME = 'raptor-portal-v3';
 const STATIC_ASSETS = [
-  '/',
-  '/admin',
-  '/admin/login',
-  '/driver/login',
   '/icon-192.png',
   '/icon-512.png',
+  '/logo-light.png',
+  '/logo-dark.png',
 ];
 
-// Install - cache static assets
+// Install - cache static assets only
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -32,22 +30,33 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch - network first, fall back to cache for navigation
+// Fetch - minimal interception, let Next.js handle navigation
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  const url = new URL(request.url);
 
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Skip API requests - always go to network
-  if (request.url.includes('/api/')) return;
+  // Skip API requests
+  if (url.pathname.startsWith('/api/')) return;
 
-  // For navigation requests (HTML pages), try network first
-  if (request.mode === 'navigate') {
+  // Skip Next.js RSC requests (client-side navigation)
+  if (url.searchParams.has('_rsc')) return;
+
+  // Skip Next.js internal requests
+  if (url.pathname.startsWith('/_next/')) return;
+
+  // Only cache static assets (images, fonts)
+  const isStaticAsset = STATIC_ASSETS.some(asset => url.pathname === asset) ||
+    url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|woff|woff2)$/);
+
+  if (isStaticAsset) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Cache successful responses
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+
+        return fetch(request).then((response) => {
           if (response.ok) {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -55,31 +64,9 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return response;
-        })
-        .catch(() => {
-          // Network failed, try cache
-          return caches.match(request).then((cached) => {
-            return cached || caches.match('/admin/login');
-          });
-        })
+        });
+      })
     );
-    return;
   }
-
-  // For other assets, cache first then network
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-
-      return fetch(request).then((response) => {
-        if (response.ok && request.url.startsWith(self.location.origin)) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
-        }
-        return response;
-      });
-    })
-  );
+  // Let all other requests pass through to the network
 });
