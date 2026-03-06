@@ -21,6 +21,7 @@ interface Purchase {
   id: string;
   store_name: string;
   receipt_image_url: string | null;
+  purchase_date: string | null;
 }
 
 interface PurchaseItem {
@@ -614,7 +615,7 @@ export default function StockPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                             <div>
                               <div style={{ fontWeight: 600, fontSize: '13px' }}>Batch {idx + 1} — {batch.purchase?.store_name || 'Unknown'}</div>
-                              <div style={{ fontSize: '12px', color: '#6b7280' }}>Purchased: {formatPurchaseDate(batch.purchaseItem.created_at)}</div>
+                              <div style={{ fontSize: '12px', color: '#6b7280' }}>Purchased: {batch.purchase?.purchase_date ? formatPurchaseDate(batch.purchase.purchase_date) : 'Unknown'}</div>
                               <div style={{ fontSize: '12px', color: '#6b7280' }}>
                                 Remaining: <strong>{batch.remainingQty}</strong> of {batch.originalQty} {pluralize(batch.originalQty, batch.product.unit_name || 'unit')}
                                 {batch.restockedQty > 0 && <span style={{ color: '#2563eb' }}> ({batch.restockedQty} pushed)</span>}
