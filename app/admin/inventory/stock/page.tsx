@@ -504,16 +504,23 @@ export default function StockPage() {
           ← Back to Inventory
         </Link>
 
-        {/* Search Bar */}
-        <div style={{ marginBottom: '16px' }}>
+        {/* Search Bar & Actions */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
           <input
             type="text"
             placeholder="Search products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={styles.searchInput}
-            style={{ width: '100%', maxWidth: '400px' }}
+            style={{ flex: 1, maxWidth: '400px' }}
           />
+          <Link
+            href="/admin/inventory/receipts"
+            className={styles.btnSecondary}
+            style={{ padding: '10px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none', whiteSpace: 'nowrap' }}
+          >
+            📋 Receipts & Transactions
+          </Link>
         </div>
 
         {error && (
