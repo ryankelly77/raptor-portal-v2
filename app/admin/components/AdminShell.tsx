@@ -19,7 +19,6 @@ const navItems = [
   { href: '/admin/temperature', label: 'Temp Logs', icon: 'temperature' },
   { href: '/admin/users', label: 'Admin Users', icon: 'admin-users' },
   { href: '/admin/drivers', label: 'Drivers', icon: 'truck' },
-  { href: '/admin/migrations', label: 'Migrations', icon: 'database' },
   { href: '/admin/settings', label: 'Settings', icon: 'settings' },
 ];
 
@@ -88,14 +87,6 @@ function NavIcon({ name }: { name: string }) {
       return (
         <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
-        </svg>
-      );
-    case 'database':
-      return (
-        <svg className={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <ellipse cx="12" cy="5" rx="9" ry="3" />
-          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
         </svg>
       );
     case 'admin-users':
