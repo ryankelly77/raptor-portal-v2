@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Get stored challenge
-  const expectedChallenge = getAndRemoveChallenge(userId);
+  const expectedChallenge = await getAndRemoveChallenge(userId);
   if (!expectedChallenge) {
     return NextResponse.json({ error: 'Challenge expired or not found' }, { status: 400 });
   }

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Store challenge with admin ID
-    storeChallenge(admin.id, options.challenge);
+    await storeChallenge(admin.id, options.challenge);
 
     return NextResponse.json({
       ...options,

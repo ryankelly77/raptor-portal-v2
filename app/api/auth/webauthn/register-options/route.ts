@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Store challenge for verification
-    storeChallenge(adminId, options.challenge);
+    await storeChallenge(adminId, options.challenge);
 
     return NextResponse.json(options);
   } catch (err) {

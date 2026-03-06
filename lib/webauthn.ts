@@ -10,40 +10,53 @@ export const origin = process.env.NODE_ENV === 'production'
   ? 'https://portal.raptor-vending.com'
   : 'http://localhost:3000';
 
-// Challenge storage (in production, use Redis or database)
-// For simplicity, we'll use a Map with expiration
-const challenges = new Map<string, { challenge: string; expiresAt: number }>();
+// Store challenge in database
+export async function storeChallenge(userId: string, challenge: string) {
+  const supabase = getAdminClient();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 minutes
 
-export function storeChallenge(userId: string, challenge: string) {
-  // Expire in 5 minutes
-  challenges.set(userId, {
-    challenge,
-    expiresAt: Date.now() + 5 * 60 * 1000,
-  });
+  // Upsert challenge (replace if exists)
+  await supabase
+    .from('webauthn_challenges')
+    .upsert({
+      user_id: userId,
+      challenge,
+      expires_at: expiresAt,
+    }, {
+      onConflict: 'user_id',
+    });
 }
 
-export function getAndRemoveChallenge(userId: string): string | null {
-  const stored = challenges.get(userId);
-  if (!stored) return null;
+// Get and remove challenge from database
+export async function getAndRemoveChallenge(userId: string): Promise<string | null> {
+  const supabase = getAdminClient();
 
-  challenges.delete(userId);
+  // Get the challenge
+  const { data, error } = await supabase
+    .from('webauthn_challenges')
+    .select('challenge, expires_at')
+    .eq('user_id', userId)
+    .single();
 
-  if (Date.now() > stored.expiresAt) {
+  if (error || !data) {
+    console.log('[WebAuthn] Challenge not found for user:', userId);
     return null;
   }
 
-  return stored.challenge;
-}
+  // Delete the challenge (one-time use)
+  await supabase
+    .from('webauthn_challenges')
+    .delete()
+    .eq('user_id', userId);
 
-// Cleanup expired challenges periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of challenges.entries()) {
-    if (now > value.expiresAt) {
-      challenges.delete(key);
-    }
+  // Check if expired
+  if (new Date(data.expires_at) < new Date()) {
+    console.log('[WebAuthn] Challenge expired for user:', userId);
+    return null;
   }
-}, 60 * 1000);
+
+  return data.challenge;
+}
 
 // Helper to get user credentials from database
 export async function getUserCredentials(userId: string, userType: 'admin' | 'driver') {
