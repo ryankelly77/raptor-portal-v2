@@ -1,4 +1,4 @@
-const CACHE_NAME = 'raptor-portal-v1';
+const CACHE_NAME = 'raptor-portal-v2';
 const STATIC_ASSETS = [
   '/',
   '/admin',
