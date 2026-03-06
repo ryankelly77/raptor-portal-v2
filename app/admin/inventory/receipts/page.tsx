@@ -86,8 +86,17 @@ const MOVEMENT_TYPE_CONFIG: Record<string, { label: string; color: string; bgCol
   restock_in: { label: 'Restock In', color: '#2563eb', bgColor: '#dbeafe', prefix: '+' },
   sold: { label: 'Sold', color: '#16a34a', bgColor: '#dcfce7', prefix: '-' },
   shrinkage: { label: 'Shrinkage', color: '#dc2626', bgColor: '#fef2f2', prefix: '-' },
+  expired: { label: 'Expired', color: '#dc2626', bgColor: '#fef2f2', prefix: '-' },
   adjustment: { label: 'Adjustment', color: '#6b7280', bgColor: '#f3f4f6', prefix: '' },
 };
+
+// Get the display type for a movement (handles expired vs general shrinkage)
+function getMovementDisplayType(movement: Movement): string {
+  if (movement.movement_type === 'shrinkage' && movement.notes === 'Expired') {
+    return 'expired';
+  }
+  return movement.movement_type;
+}
 
 export default function ReceiptsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('receipts');
@@ -666,7 +675,8 @@ export default function ReceiptsPage() {
                   </thead>
                   <tbody>
                     {filteredTransactions.map(tx => {
-                      const typeConfig = MOVEMENT_TYPE_CONFIG[tx.movement_type] || { label: tx.movement_type, color: '#6b7280', bgColor: '#f3f4f6', prefix: '' };
+                      const displayType = getMovementDisplayType(tx);
+                      const typeConfig = MOVEMENT_TYPE_CONFIG[displayType] || { label: displayType, color: '#6b7280', bgColor: '#f3f4f6', prefix: '' };
                       const qty = tx.quantity;
                       const displayQty = typeConfig.prefix + Math.abs(qty);
 
