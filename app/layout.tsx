@@ -1,9 +1,20 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
   title: "Raptor Portal",
   description: "Raptor Vending Installation Portal",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Raptor Portal",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#FF580F",
 };
 
 export default function RootLayout({
@@ -13,7 +24,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
+      <body>
+        {children}
+        <ServiceWorkerRegistration />
+      </body>
     </html>
   );
 }

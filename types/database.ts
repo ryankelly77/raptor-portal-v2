@@ -284,6 +284,21 @@ export interface DriverLoginToken {
   created_at: string;
 }
 
+export type WebAuthnUserType = 'admin' | 'driver';
+
+export interface WebAuthnCredential {
+  id: string;
+  user_id: string;
+  user_type: WebAuthnUserType;
+  credential_id: string;
+  public_key: string;
+  counter: number;
+  transports: string[] | null;
+  device_name: string | null;
+  created_at: string;
+  last_used: string | null;
+}
+
 // Extended types with relations
 export interface ProjectWithRelations extends Project {
   property?: Property;
@@ -316,6 +331,7 @@ export type EmailTemplateInsert = Pick<EmailTemplate, 'name'> & Partial<Omit<Ema
 export type AdminInsert = Pick<Admin, 'email' | 'password_hash' | 'name'> & Partial<Omit<Admin, 'id' | 'created_at' | 'updated_at' | 'email' | 'password_hash' | 'name'>>;
 export type UserInviteInsert = Pick<UserInvite, 'user_type' | 'token' | 'expires_at'> & Partial<Omit<UserInvite, 'id' | 'created_at' | 'user_type' | 'token' | 'expires_at'>>;
 export type DriverLoginTokenInsert = Pick<DriverLoginToken, 'driver_id' | 'token' | 'expires_at'> & Partial<Omit<DriverLoginToken, 'id' | 'created_at' | 'driver_id' | 'token' | 'expires_at'>>;
+export type WebAuthnCredentialInsert = Pick<WebAuthnCredential, 'user_id' | 'user_type' | 'credential_id' | 'public_key'> & Partial<Omit<WebAuthnCredential, 'id' | 'created_at' | 'user_id' | 'user_type' | 'credential_id' | 'public_key'>>;
 
 // Update types (all fields optional except id)
 export type PropertyManagerUpdate = Partial<Omit<PropertyManager, 'id' | 'created_at' | 'updated_at'>>;
@@ -331,3 +347,4 @@ export type EmailTemplateUpdate = Partial<Omit<EmailTemplate, 'id' | 'created_at
 export type AdminUpdate = Partial<Omit<Admin, 'id' | 'created_at' | 'updated_at'>>;
 export type UserInviteUpdate = Partial<Omit<UserInvite, 'id' | 'created_at'>>;
 export type DriverLoginTokenUpdate = Partial<Omit<DriverLoginToken, 'id' | 'created_at'>>;
+export type WebAuthnCredentialUpdate = Partial<Omit<WebAuthnCredential, 'id' | 'created_at'>>;

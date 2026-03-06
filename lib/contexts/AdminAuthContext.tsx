@@ -15,6 +15,7 @@ interface AdminAuthContextType {
   adminInfo: AdminInfo | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  setToken: (token: string, admin?: AdminInfo) => void;
 }
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
@@ -69,6 +70,16 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setToken = useCallback((token: string, admin?: AdminInfo) => {
+    sessionStorage.setItem('adminAuth', 'true');
+    sessionStorage.setItem('adminToken', token);
+    if (admin) {
+      sessionStorage.setItem('adminInfo', JSON.stringify(admin));
+      setAdminInfo(admin);
+    }
+    setIsAuthenticated(true);
+  }, []);
+
   const logout = useCallback(() => {
     sessionStorage.removeItem('adminAuth');
     sessionStorage.removeItem('adminToken');
@@ -78,7 +89,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AdminAuthContext.Provider value={{ isAuthenticated, isLoading, adminInfo, login, logout }}>
+    <AdminAuthContext.Provider value={{ isAuthenticated, isLoading, adminInfo, login, logout, setToken }}>
       {children}
     </AdminAuthContext.Provider>
   );

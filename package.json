@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@simplewebauthn/browser": "^13.2.2",
+    "@simplewebauthn/server": "^13.2.3",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.98.0",
     "@zxing/browser": "^0.1.5",
@@ -30,6 +32,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "sharp": "^0.34.5",
     "typescript": "^5"
   }
 }
