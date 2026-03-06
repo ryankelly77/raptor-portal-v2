@@ -412,83 +412,118 @@ export default function TemperaturePage() {
                 <p>No drivers yet. Click &quot;+ Add Driver&quot; to create one.</p>
               </div>
             ) : (
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {drivers.map((driver) =>
-                    editingDriver === driver.id ? (
-                      <tr key={driver.id} className={styles.editing}>
-                        <td>
-                          <input
-                            className={styles.editInput}
-                            value={editDriverForm.name}
-                            onChange={(e) => setEditDriverForm({ ...editDriverForm, name: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className={styles.editInput}
-                            value={editDriverForm.email}
-                            onChange={(e) => setEditDriverForm({ ...editDriverForm, email: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className={styles.editInput}
-                            value={editDriverForm.phone}
-                            onChange={(e) => setEditDriverForm({ ...editDriverForm, phone: e.target.value })}
-                          />
-                        </td>
-                        <td colSpan={2}>
-                          <div className={styles.actionButtons}>
-                            <button className={`${styles.btnSmall} ${styles.edit}`} onClick={() => handleUpdateDriver(driver.id)}>
-                              Save
-                            </button>
-                            <button className={`${styles.btnSmall} ${styles.edit}`} onClick={() => setEditingDriver(null)}>
-                              Cancel
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      <tr key={driver.id} className={!driver.is_active ? styles.inactive : ''}>
-                        <td>{driver.name}</td>
-                        <td>{driver.email || '—'}</td>
-                        <td>{driver.phone || '—'}</td>
-                        <td>
-                          <span className={`${styles.statusBadge} ${driver.is_active ? styles.active : styles.inactive}`}>
-                            {driver.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td>
-                          <div className={styles.actionButtons}>
-                            <button className={`${styles.btnSmall} ${styles.link}`} onClick={() => copyDriverLink(driver.access_token)}>
-                              Copy Link
-                            </button>
-                            <button className={`${styles.btnSmall} ${styles.edit}`} onClick={() => startEditDriver(driver)}>
-                              Edit
-                            </button>
-                            <button className={`${styles.btnSmall} ${styles.toggle}`} onClick={() => handleToggleDriverActive(driver)}>
-                              {driver.is_active ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button className={`${styles.btnSmall} ${styles.delete}`} onClick={() => handleDeleteDriver(driver.id)}>
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
+              <>
+                {/* Desktop Table */}
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drivers.map((driver) =>
+                      editingDriver === driver.id ? (
+                        <tr key={driver.id} className={styles.editing}>
+                          <td>
+                            <input
+                              className={styles.editInput}
+                              value={editDriverForm.name}
+                              onChange={(e) => setEditDriverForm({ ...editDriverForm, name: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className={styles.editInput}
+                              value={editDriverForm.email}
+                              onChange={(e) => setEditDriverForm({ ...editDriverForm, email: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className={styles.editInput}
+                              value={editDriverForm.phone}
+                              onChange={(e) => setEditDriverForm({ ...editDriverForm, phone: e.target.value })}
+                            />
+                          </td>
+                          <td colSpan={2}>
+                            <div className={styles.actionButtons}>
+                              <button className={`${styles.btnSmall} ${styles.edit}`} onClick={() => handleUpdateDriver(driver.id)}>
+                                Save
+                              </button>
+                              <button className={`${styles.btnSmall} ${styles.edit}`} onClick={() => setEditingDriver(null)}>
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={driver.id} className={!driver.is_active ? styles.inactive : ''}>
+                          <td>{driver.name}</td>
+                          <td>{driver.email || '—'}</td>
+                          <td>{driver.phone || '—'}</td>
+                          <td>
+                            <span className={`${styles.statusBadge} ${driver.is_active ? styles.active : styles.inactive}`}>
+                              {driver.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td>
+                            <div className={styles.actionButtons}>
+                              <button className={`${styles.btnSmall} ${styles.link}`} onClick={() => copyDriverLink(driver.access_token)}>
+                                Copy Link
+                              </button>
+                              <button className={`${styles.btnSmall} ${styles.edit}`} onClick={() => startEditDriver(driver)}>
+                                Edit
+                              </button>
+                              <button className={`${styles.btnSmall} ${styles.toggle}`} onClick={() => handleToggleDriverActive(driver)}>
+                                {driver.is_active ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button className={`${styles.btnSmall} ${styles.delete}`} onClick={() => handleDeleteDriver(driver.id)}>
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Mobile Cards */}
+                <div className={styles.mobileCardList}>
+                  {drivers.map((driver) => (
+                    <div key={driver.id} className={styles.mobileCard} style={{ opacity: driver.is_active ? 1 : 0.6 }}>
+                      <div className={styles.mobileCardHeader}>
+                        <div>
+                          <div className={styles.mobileCardName}>{driver.name}</div>
+                          {driver.email && <div className={styles.mobileCardMeta}>{driver.email}</div>}
+                          {driver.phone && <div className={styles.mobileCardMeta}>{driver.phone}</div>}
+                        </div>
+                        <span className={`${styles.statusBadge} ${driver.is_active ? styles.active : styles.inactive}`}>
+                          {driver.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div className={styles.mobileCardActions}>
+                        <button className={`${styles.btnSmall} ${styles.link}`} onClick={() => copyDriverLink(driver.access_token)}>
+                          Copy Link
+                        </button>
+                        <button className={`${styles.btnSmall} ${styles.edit}`} onClick={() => startEditDriver(driver)}>
+                          Edit
+                        </button>
+                        <button className={`${styles.btnSmall} ${styles.toggle}`} onClick={() => handleToggleDriverActive(driver)}>
+                          {driver.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button className={`${styles.btnSmall} ${styles.delete}`} onClick={() => handleDeleteDriver(driver.id)}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -574,53 +609,95 @@ export default function TemperaturePage() {
                 <p>No sessions found.</p>
               </div>
             ) : (
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Driver</th>
-                    <th>Status</th>
-                    <th>Entries</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <>
+                {/* Desktop Table */}
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Driver</th>
+                      <th>Status</th>
+                      <th>Entries</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSessions.map((session) => (
+                      <tr
+                        key={session.id}
+                        onClick={() => setSelectedSession(selectedSession === session.id ? null : session.id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>{formatDate(session.session_date)}</td>
+                        <td>{getDriverName(session.driver_id)}</td>
+                        <td>
+                          <span
+                            className={`${styles.statusBadge} ${session.status === 'completed' ? styles.completed : styles.inProgress}`}
+                          >
+                            {session.status === 'in_progress' ? 'In Progress' : 'Completed'}
+                          </span>
+                        </td>
+                        <td>{session.entries?.length || 0} entries</td>
+                        <td>
+                          <div className={styles.actionButtons} onClick={(e) => e.stopPropagation()}>
+                            <button
+                              className={`${styles.btnSmall} ${styles.edit}`}
+                              onClick={() => setSelectedSession(selectedSession === session.id ? null : session.id)}
+                            >
+                              {selectedSession === session.id ? 'Hide' : 'View'}
+                            </button>
+                            <button
+                              className={`${styles.btnSmall} ${styles.delete}`}
+                              onClick={() => handleDeleteSession(session.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Mobile Cards */}
+                <div className={styles.mobileCardList}>
                   {filteredSessions.map((session) => (
-                    <tr
+                    <div
                       key={session.id}
+                      className={styles.mobileCard}
                       onClick={() => setSelectedSession(selectedSession === session.id ? null : session.id)}
                       style={{ cursor: 'pointer' }}
                     >
-                      <td>{formatDate(session.session_date)}</td>
-                      <td>{getDriverName(session.driver_id)}</td>
-                      <td>
+                      <div className={styles.mobileCardHeader}>
+                        <div>
+                          <div className={styles.mobileCardName}>{formatDate(session.session_date)}</div>
+                          <div className={styles.mobileCardMeta}>{getDriverName(session.driver_id)}</div>
+                          <div className={styles.mobileCardMeta}>{session.entries?.length || 0} entries</div>
+                        </div>
                         <span
                           className={`${styles.statusBadge} ${session.status === 'completed' ? styles.completed : styles.inProgress}`}
                         >
                           {session.status === 'in_progress' ? 'In Progress' : 'Completed'}
                         </span>
-                      </td>
-                      <td>{session.entries?.length || 0} entries</td>
-                      <td>
-                        <div className={styles.actionButtons} onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className={`${styles.btnSmall} ${styles.edit}`}
-                            onClick={() => setSelectedSession(selectedSession === session.id ? null : session.id)}
-                          >
-                            {selectedSession === session.id ? 'Hide' : 'View'}
-                          </button>
-                          <button
-                            className={`${styles.btnSmall} ${styles.delete}`}
-                            onClick={() => handleDeleteSession(session.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                      </div>
+                      <div className={styles.mobileCardActions} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className={`${styles.btnSmall} ${styles.edit}`}
+                          onClick={() => setSelectedSession(selectedSession === session.id ? null : session.id)}
+                        >
+                          {selectedSession === session.id ? 'Hide' : 'View'}
+                        </button>
+                        <button
+                          className={`${styles.btnSmall} ${styles.delete}`}
+                          onClick={() => handleDeleteSession(session.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </>
             )}
           </div>
 

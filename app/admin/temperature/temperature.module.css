@@ -523,17 +523,34 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .temperaturePage {
+    padding: 0;
+  }
+
   .pageHeader {
     flex-direction: column;
     align-items: flex-start;
   }
 
   .sectionTabs {
-    flex-direction: column;
+    width: 100%;
   }
 
   .tabButton {
+    flex: 1;
+    padding: 12px 16px;
+  }
+
+  .cardHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .cardHeader .btnPrimary,
+  .cardHeader .exportButton {
     width: 100%;
+    justify-content: center;
   }
 
   .addDriverForm {
@@ -544,13 +561,78 @@
     width: 100%;
   }
 
+  .addDriverForm .btnPrimary,
+  .addDriverForm .btnSecondary {
+    width: 100%;
+  }
+
+  /* Hide table on mobile, show cards */
   .table {
-    display: block;
-    overflow-x: auto;
+    display: none;
+  }
+
+  /* Mobile card list for drivers/sessions */
+  .mobileCardList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .mobileCard {
+    background: #f9fafb;
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid #e5e7eb;
+  }
+
+  .mobileCardHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .mobileCardName {
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .mobileCardMeta {
+    font-size: 13px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+
+  .mobileCardActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .mobileCardActions .btnSmall {
+    flex: 1;
+    min-width: calc(50% - 4px);
+    text-align: center;
+    padding: 8px 12px;
   }
 
   .filters {
     flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .filterSelect,
+  .filterInput {
+    width: 100%;
+  }
+
+  .exportModal {
+    padding: 16px;
   }
 
   .exportRow {
@@ -559,5 +641,60 @@
 
   .exportGroup {
     width: 100%;
+  }
+
+  /* Entry items on mobile */
+  .entryItem {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .entryInfo {
+    order: 1;
+    flex-basis: calc(100% - 80px);
+  }
+
+  .entryType {
+    order: 0;
+  }
+
+  .entryTemp {
+    order: 2;
+    font-size: 20px;
+    background: #f3f4f6;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+
+  .entryTemp.warning {
+    background: #fef2f2;
+  }
+
+  .entryTime {
+    order: 3;
+    flex-basis: auto;
+  }
+
+  .entryPhoto {
+    order: 4;
+    width: 56px;
+    height: 56px;
+  }
+
+  .sessionDetail {
+    padding: 16px;
+  }
+
+  .sessionHeader {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* Desktop only - hide mobile cards */
+@media (min-width: 769px) {
+  .mobileCardList {
+    display: none;
   }
 }
