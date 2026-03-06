@@ -84,59 +84,100 @@ export default function InventoryPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Group movements by purchase_item_id
-      // All movements are stored in INDIVIDUAL UNITS (not packages)
-      const movementsByPurchaseItem = new Map<string, { restocked: number; discarded: number }>();
-      for (const m of movements) {
-        if (m.purchase_item_id) {
-          const existing = movementsByPurchaseItem.get(m.purchase_item_id) || { restocked: 0, discarded: 0 };
+      // Calculate quantities by product from movements
+      // SUM the quantity column, not count rows!
+      const purchasedByProduct = new Map<string, number>();
+      const restockedOutByProduct = new Map<string, number>();
+      const soldByProduct = new Map<string, number>();
+      const shrinkageByProduct = new Map<string, number>();
 
-          if (m.movement_type === 'restock_out') {
-            existing.restocked += Math.abs(m.quantity); // Already in units
-          } else if (m.movement_type === 'shrinkage') {
-            existing.discarded += Math.abs(m.quantity); // Already in units
-          }
-          movementsByPurchaseItem.set(m.purchase_item_id, existing);
+      for (const m of movements) {
+        const productId = m.product_id;
+        const qty = Math.abs(m.quantity);
+
+        switch (m.movement_type) {
+          case 'purchase_in':
+            purchasedByProduct.set(productId, (purchasedByProduct.get(productId) || 0) + qty);
+            break;
+          case 'restock_out':
+            restockedOutByProduct.set(productId, (restockedOutByProduct.get(productId) || 0) + qty);
+            break;
+          case 'sold':
+            soldByProduct.set(productId, (soldByProduct.get(productId) || 0) + qty);
+            break;
+          case 'shrinkage':
+            shrinkageByProduct.set(productId, (shrinkageByProduct.get(productId) || 0) + qty);
+            break;
         }
       }
 
-      // Calculate in-machine from restock_in movements
-      // All movements are stored in INDIVIDUAL UNITS (not packages)
+      // Calculate in-machine: restock_in - sold
       let totalInMachine = 0;
       for (const m of movements) {
         if (m.movement_type === 'restock_in') {
-          totalInMachine += m.quantity; // Already in units
+          totalInMachine += m.quantity;
         } else if (m.movement_type === 'sold') {
-          totalInMachine -= m.quantity; // Already in units
+          totalInMachine -= m.quantity;
         }
       }
 
-      // Calculate stats from purchase items
+      // Build a map of purchase items by product for expiration/cost info
+      type PurchaseItemWithMvmts = {
+        id: string;
+        product_id: string;
+        quantity: number;
+        unit_cost: number | null;
+        expiration_date: string | null;
+      };
+      const purchaseItemsByProduct = new Map<string, PurchaseItemWithMvmts[]>();
+      for (const pi of purchaseItems) {
+        const existing = purchaseItemsByProduct.get(pi.product_id) || [];
+        existing.push(pi);
+        purchaseItemsByProduct.set(pi.product_id, existing);
+      }
+
+      // Calculate stats from movements (not purchase items)
+      // On-hand = purchase_in - restock_out - shrinkage
       let totalOnHand = 0;
       let totalValue = 0;
       let expiringCritical = 0;
       let expiringWarning = 0;
       const expiringSoon: ExpiringItem[] = [];
 
-      for (const pi of purchaseItems) {
-        const product = productsMap.get(pi.product_id);
-        if (!product) continue;
-
-        const mvmts = movementsByPurchaseItem.get(pi.id) || { restocked: 0, discarded: 0 };
-        // pi.quantity is PACKAGES, convert to units
-        const unitsPerPkg = product.units_per_package || 1;
-        const totalUnitsReceived = pi.quantity * unitsPerPkg;
-        const remaining = totalUnitsReceived - mvmts.restocked - mvmts.discarded;
+      for (const product of products) {
+        const purchased = purchasedByProduct.get(product.id) || 0;
+        const restockedOut = restockedOutByProduct.get(product.id) || 0;
+        const shrinkage = shrinkageByProduct.get(product.id) || 0;
+        const remaining = purchased - restockedOut - shrinkage;
 
         if (remaining > 0) {
           totalOnHand += remaining;
-          if (pi.unit_cost) {
-            totalValue += remaining * pi.unit_cost;
+
+          // Get purchase items for this product to calculate value and expiration
+          const productPurchaseItems = purchaseItemsByProduct.get(product.id) || [];
+
+          // Calculate average unit cost and total value from purchase items
+          let totalCost = 0;
+          let costCount = 0;
+          for (const pi of productPurchaseItems) {
+            if (pi.unit_cost) {
+              totalCost += pi.unit_cost;
+              costCount++;
+            }
+          }
+          if (costCount > 0) {
+            const avgCost = totalCost / costCount;
+            totalValue += remaining * avgCost;
           }
 
-          // Check expiration
-          if (pi.expiration_date) {
-            const expDate = new Date(pi.expiration_date);
+          // Check expiration from earliest expiring batch
+          const itemsWithExpiry = productPurchaseItems
+            .filter(pi => pi.expiration_date)
+            .sort((a, b) => new Date(a.expiration_date!).getTime() - new Date(b.expiration_date!).getTime());
+
+          if (itemsWithExpiry.length > 0) {
+            const earliestPi = itemsWithExpiry[0];
+            const expDate = new Date(earliestPi.expiration_date!);
             const daysUntil = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
             const settings = getExpSettings(product.category);
 
@@ -153,7 +194,7 @@ export default function InventoryPage() {
                 productName: product.name,
                 productBrand: product.brand,
                 quantity: remaining,
-                expirationDate: pi.expiration_date,
+                expirationDate: earliestPi.expiration_date!,
                 daysUntil,
               });
             }
