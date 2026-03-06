@@ -119,25 +119,26 @@ function AdjustPageContent() {
     const product = products.find(p => p.id === selectedProduct);
     const unitsPerPkg = product?.units_per_package || 1;
 
-    // Sum all purchase items for this product (these are in units)
+    // Sum all purchase items for this product
+    // pi.quantity is PACKAGES, convert to units
     let totalReceived = 0;
     for (const pi of purchaseItems) {
       if (pi.product_id === selectedProduct) {
-        totalReceived += pi.quantity;
+        totalReceived += pi.quantity * unitsPerPkg;
       }
     }
 
-    // Subtract outbound movements
+    // Subtract outbound movements (already in units)
     let totalOut = 0;
     for (const m of movements) {
       if (m.product_id !== selectedProduct) continue;
 
       switch (m.movement_type) {
         case 'restock_out':
-          totalOut += Math.abs(m.quantity) * unitsPerPkg;
+          totalOut += Math.abs(m.quantity); // Already in units
           break;
         case 'shrinkage':
-          totalOut += Math.abs(m.quantity);
+          totalOut += Math.abs(m.quantity); // Already in units
           break;
       }
     }

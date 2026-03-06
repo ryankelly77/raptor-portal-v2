@@ -177,7 +177,10 @@ export default function ReceiptsPage() {
           }));
 
         const calculatedTotal = items.reduce((sum, item) => {
-          const price = item.package_price || (item.unit_cost ? item.unit_cost * item.quantity : 0);
+          // item.quantity is PACKAGES, unit_cost is per unit
+          const unitsPerPkg = item.product.units_per_package || 1;
+          const totalUnits = item.quantity * unitsPerPkg;
+          const price = item.package_price || (item.unit_cost ? item.unit_cost * totalUnits : 0);
           return sum + price;
         }, 0);
 
@@ -303,9 +306,9 @@ export default function ReceiptsPage() {
 
     filteredReceipts.forEach(r => {
       r.items.forEach(item => {
-        const pkgQty = item.package_qty || 1;
+        const pkgQty = item.quantity; // quantity is now PACKAGES
         const unitsPerPkg = item.product.units_per_package || 1;
-        const totalUnits = item.quantity;
+        const totalUnits = pkgQty * unitsPerPkg;
         rows.push([
           r.purchase_date,
           r.store_name,
@@ -515,11 +518,11 @@ export default function ReceiptsPage() {
                     {expandedReceipts.has(receipt.id) && (
                       <div style={{ borderTop: '1px solid #e5e7eb', padding: '12px 16px', background: '#f9fafb' }}>
                         {receipt.items.map(item => {
-                          const pkgQty = item.package_qty || 1;
+                          const pkgQty = item.quantity; // quantity is now PACKAGES
                           const unitsPerPkg = item.product.units_per_package || 1;
-                          const totalUnits = item.quantity;
+                          const totalUnits = pkgQty * unitsPerPkg;
                           const pkgPrice = item.package_price || (item.unit_cost ? item.unit_cost * totalUnits : 0);
-                          const unitCost = item.unit_cost || (pkgPrice / totalUnits);
+                          const unitCost = item.unit_cost || (totalUnits > 0 ? pkgPrice / totalUnits : 0);
 
                           return (
                             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>

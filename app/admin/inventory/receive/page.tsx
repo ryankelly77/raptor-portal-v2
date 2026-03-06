@@ -647,19 +647,19 @@ export default function ReceiveItemsPage() {
         }
 
         // Calculate unit quantities and costs
-        // If item has units_per_package > 1, convert packages to individual units
+        // item.quantity = number of PACKAGES purchased (e.g., 1 case, 2 packs)
+        // totalUnits = packages × units_per_package (for movements)
         const unitsPerPkg = item.units_per_package || 1;
-        const packageQty = item.quantity || 1; // Ensure at least 1 package
-        const totalUnits = packageQty * unitsPerPkg; // e.g., 1 package × 6 units = 6 units
+        const packageQty = item.quantity || 1; // Number of packages purchased
+        const totalUnits = packageQty * unitsPerPkg; // Total sellable units
         const packagePrice = item.unitCost ? parseFloat(item.unitCost) : null;
         const perUnitCost = packagePrice && unitsPerPkg > 1
-          ? Math.round((packagePrice / unitsPerPkg) * 100) / 100 // e.g., $5.48 / 6 = $0.91
+          ? Math.round((packagePrice / unitsPerPkg) * 100) / 100
           : packagePrice;
 
-        console.log('[Receive] Item:', item.name, '| Packages:', packageQty, '| Units/pkg:', unitsPerPkg, '| Total units:', totalUnits, '| Package price:', packagePrice, '| Per-unit cost:', perUnitCost, '| Exp:', item.expirationDate);
+        console.log(`[Receive] Storing: ${packageQty} ${item.package_name || 'pkg'} × ${unitsPerPkg} ${item.unit_name || 'unit'} = ${totalUnits} units, movement_qty=${totalUnits}`);
 
-        // Create purchase item with per-unit cost (store individual units)
-        // Also store original package info for display purposes
+        // Create purchase item - quantity is PACKAGES, not units
         const purchaseItemRes = await adminFetch('/api/admin/crud', {
           method: 'POST',
           body: JSON.stringify({
@@ -668,10 +668,10 @@ export default function ReceiveItemsPage() {
             data: {
               purchase_id: purchaseId,
               product_id: productId,
-              quantity: totalUnits, // Store as individual units (e.g., 6 for a 6-pack)
+              quantity: packageQty, // Store as PACKAGES (e.g., 1 case, 2 packs)
               unit_cost: perUnitCost, // Store per-unit cost (e.g., $0.91/cup)
               expiration_date: item.expirationDate || null,
-              package_qty: packageQty, // Original packages purchased (e.g., 1)
+              package_qty: packageQty, // Same as quantity - packages purchased
               package_price: packagePrice, // Price per package (e.g., $5.48)
             },
           }),

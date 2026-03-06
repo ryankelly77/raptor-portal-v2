@@ -191,7 +191,10 @@ export default function StockPage() {
           }
         }
 
-        const remainingQty = purchaseItem.quantity - restockedQty - discardedQty;
+        // purchaseItem.quantity is PACKAGES, convert to units for calculation
+        const unitsPerPkg = product.units_per_package || 1;
+        const totalUnitsReceived = purchaseItem.quantity * unitsPerPkg;
+        const remainingQty = totalUnitsReceived - restockedQty - discardedQty;
         if (remainingQty <= 0) continue;
 
         let daysUntilExpiry: number | null = null;
@@ -215,7 +218,7 @@ export default function StockPage() {
           purchaseItem,
           purchase,
           product,
-          originalQty: purchaseItem.quantity,
+          originalQty: totalUnitsReceived, // Total units (packages × units_per_package)
           restockedQty,
           discardedQty,
           remainingQty,

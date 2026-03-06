@@ -123,7 +123,10 @@ export default function InventoryPage() {
         if (!product) continue;
 
         const mvmts = movementsByPurchaseItem.get(pi.id) || { restocked: 0, discarded: 0 };
-        const remaining = pi.quantity - mvmts.restocked - mvmts.discarded;
+        // pi.quantity is PACKAGES, convert to units
+        const unitsPerPkg = product.units_per_package || 1;
+        const totalUnitsReceived = pi.quantity * unitsPerPkg;
+        const remaining = totalUnitsReceived - mvmts.restocked - mvmts.discarded;
 
         if (remaining > 0) {
           totalOnHand += remaining;
