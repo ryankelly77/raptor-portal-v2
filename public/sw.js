@@ -1,4 +1,4 @@
-const CACHE_NAME = 'raptor-portal-v3';
+const CACHE_NAME = 'raptor-portal-v4';
 const STATIC_ASSETS = [
   '/icon-192.png',
   '/icon-512.png',
